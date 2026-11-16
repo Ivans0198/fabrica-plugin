@@ -79,3 +79,31 @@ describe("los agentes de la nube", () => {
     },
   );
 });
+
+// La etiqueta solo miraba su propio nombre: la nube tomaba una issue
+// bloqueada o asignada a otra persona, y gastaba la instalación y el agente.
+describe("claude-backlog.yml antes del agente", () => {
+  const gateIndex = steps.findIndex((s) => s.id === "gate");
+
+  it("revisa si la issue se puede tomar antes de instalar nada", () => {
+    const gate = steps[gateIndex];
+    const install = steps.findIndex(
+      (s) => s.name === "Dependencias del proyecto",
+    );
+
+    expect(gateIndex).toBeGreaterThan(-1);
+    expect(gateIndex).toBeLessThan(install);
+    expect(gate?.if).toMatch(/github\.event_name == 'issues'/);
+    expect(gate?.run).toContain(
+      'fabrica-eligible "$NUM" --actor "$GITHUB_ACTOR"',
+    );
+  });
+
+  it("si no se puede tomar, ningún paso siguiente corre", () => {
+    for (const step of steps.slice(gateIndex + 1)) {
+      expect(step.if, step.name ?? step.uses).toContain(
+        "steps.gate.outputs.skip != 'true'",
+      );
+    }
+  });
+});

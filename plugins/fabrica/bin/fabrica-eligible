@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# ¿La nube puede tomar una issue? 0 sí (y la asigna), 2 asignada a otra persona, 3 bloqueada. Uso: fabrica-eligible <N> --actor <usuario>
+exec bash "$(dirname "$(readlink -f "$0")")/../scripts/issue-queue.sh" eligible "$@"

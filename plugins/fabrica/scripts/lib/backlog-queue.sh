@@ -354,3 +354,33 @@ cleanup_worktrees() {  # [dry-run]
   done
   git worktree prune 2>/dev/null || true
 }
+
+# Los números de las issues que bloquean a N y siguen abiertas, uno por línea.
+open_blockers() {  # issue number
+  local b
+  for b in $(gh issue view "$1" --json labels -q '.labels[].name' \
+               | sed -n 's/^blocked-by-\([0-9][0-9]*\)$/\1/p'); do
+    [ "$(gh issue view "$b" --json state -q .state)" != CLOSED ] && echo "$b"
+  done
+  return 0
+}
+
+# ¿Se puede tomar N por pedido de `actor` (quien puso ready-for-dev)? 0 si sí,
+# y se la asigna, para que el cron y las sesiones locales respeten el
+# reclamo; 2 si está asignada a otra persona; 3 si la bloquea una issue
+# abierta. La misma regla que la cola local.
+issue_eligible_for() {  # issue number, actor
+  local n="$1" actor="$2" blockers others
+  blockers=$(open_blockers "$n" | sed 's/^/#/' | tr '\n' ' ')
+  if [ -n "$blockers" ]; then
+    echo "#$n está bloqueada por ${blockers% }: se toma cuando se cierre." >&2
+    return 3
+  fi
+  others=$(gh issue view "$n" --json assignees --jq "[.assignees[].login] | map(select(. != \"$actor\")) | length" 2>/dev/null || echo 0)
+  if [ "${others:-0}" -gt 0 ]; then
+    echo "#$n está asignada a otra persona: es su reclamo." >&2
+    return 2
+  fi
+  gh issue edit "$n" --add-assignee "$actor" >/dev/null 2>&1 || true
+  return 0
+}

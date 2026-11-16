@@ -9,9 +9,10 @@
 #   issue-queue.sh release N --needs-human "m"  marca N para una persona
 #   issue-queue.sh done N                       ¿N ya tiene un PR que la cierre?
 #   issue-queue.sh cleanup [--dry-run]          borra worktrees de issues cerradas
+#   issue-queue.sh eligible N --actor U         ¿la nube puede tomar N por pedido de U?
 #
 # Los llaman fabrica-next-issue, fabrica-claim, fabrica-release,
-# fabrica-check-done y fabrica-cleanup. La salida útil va a stdout; los avisos, a stderr.
+# fabrica-check-done, fabrica-cleanup y fabrica-eligible. La salida útil va a stdout; los avisos, a stderr.
 
 set -euo pipefail
 
@@ -19,7 +20,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 die() { echo "❌ $*" >&2; exit 1; }
 usage() {
-  sed -n '6,11p' "${BASH_SOURCE[0]}" | sed 's/^# *//' >&2
+  sed -n '6,12p' "${BASH_SOURCE[0]}" | sed 's/^# *//' >&2
   exit 64
 }
 
@@ -86,6 +87,13 @@ case "${1:-}" in
         ;;
       *) usage ;;
     esac
+    ;;
+  eligible)
+    n=$(issue_number "${2:-}")
+    [ "${3:-}" = --actor ] && [ -n "${4:-}" ] || usage
+    rc=0
+    issue_eligible_for "$n" "$4" || rc=$?
+    exit "$rc"
     ;;
   cleanup)
     case "${2:-}" in

@@ -479,6 +479,79 @@ describe("comandos de la cola", () => {
     TIMEOUT,
   );
 
+  // La nube tomaba una issue con ready-for-dev aunque estuviera bloqueada o
+  // asignada a otra persona: el disparo solo miraba el nombre de la etiqueta.
+  describe("fabrica-eligible", () => {
+    it(
+      "da por elegible una issue libre y se la asigna a quien puso la etiqueta",
+      async () => {
+        const { repo, env } = await project();
+
+        const { code } = await run(
+          ["eligible", "5", "--actor", "ana"],
+          repo,
+          env,
+        );
+
+        expect(code).toBe(0);
+        expect(await calls()).toMatch(/issue edit 5 --add-assignee ana/);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      "sale con 2 si la issue está asignada a otra persona, sin tocarla",
+      async () => {
+        const { repo, env } = await project();
+
+        const { code, stderr } = await run(
+          ["eligible", "5", "--actor", "ana"],
+          repo,
+          { ...env, FAKE_OTHERS: "1" },
+        );
+
+        expect(code).toBe(2);
+        expect(stderr).toMatch(/asignada/);
+        expect(await calls()).not.toMatch(/issue edit/);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      "sale con 3 y nombra el bloqueo si la issue depende de otra abierta",
+      async () => {
+        const { repo, env } = await project();
+
+        const { code, stderr } = await run(
+          ["eligible", "5", "--actor", "ana"],
+          repo,
+          { ...env, FAKE_LABELS_5: "blocked-by-9", FAKE_STATE_9: "OPEN" },
+        );
+
+        expect(code).toBe(3);
+        expect(stderr).toMatch(/#9/);
+        expect(await calls()).not.toMatch(/issue edit/);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      "una issue cuyo bloqueo ya se cerró es elegible",
+      async () => {
+        const { repo, env } = await project();
+
+        const { code } = await run(
+          ["eligible", "5", "--actor", "ana"],
+          repo,
+          { ...env, FAKE_LABELS_5: "blocked-by-9", FAKE_STATE_9: "CLOSED" },
+        );
+
+        expect(code).toBe(0);
+      },
+      TIMEOUT,
+    );
+  });
+
   it(
     "rechaza un número de issue que no es un número",
     async () => {
