@@ -187,6 +187,7 @@ const CLAUDE_MENTIONS_WORKFLOW = pluginFile(
   ".github/workflows/claude-mentions.yml",
 );
 const FACTORY_CONFIG_LIB = pluginFile("scripts/lib/factory-config.sh");
+const BACKLOG_QUEUE_LIB = pluginFile("scripts/lib/backlog-queue.sh");
 
 async function setupWorkDir(): Promise<string> {
   const workDir = await mkdtemp(path.join(tmpdir(), "seadragons-backlog-"));
@@ -207,6 +208,10 @@ async function setupWorkDir(): Promise<string> {
   await copyFile(
     FACTORY_CONFIG_LIB,
     path.join(workDir, "scripts/lib/factory-config.sh"),
+  );
+  await copyFile(
+    BACKLOG_QUEUE_LIB,
+    path.join(workDir, "scripts/lib/backlog-queue.sh"),
   );
   await runBash("git init -q", workDir, process.env);
   // `run_worker` ahora crea el worktree del ticket con `git worktree add`, y
