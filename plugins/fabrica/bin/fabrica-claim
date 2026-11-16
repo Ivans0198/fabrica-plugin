@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Reclama una issue y prepara su worktree impl-N; imprime su ruta. Uso: fabrica-claim <N>
+exec bash "$(dirname "$(readlink -f "$0")")/../scripts/issue-queue.sh" claim "$@"

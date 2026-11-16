@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# La siguiente issue elegible de la cola. Uso: fabrica-next-issue
+exec bash "$(dirname "$(readlink -f "$0")")/../scripts/issue-queue.sh" next "$@"

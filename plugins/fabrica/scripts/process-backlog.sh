@@ -218,6 +218,8 @@ run_worker() {
   local n="$1" wt_dir
   wt_dir=$(worktree_dir_for "$n")
   ensure_worker_worktree "$n"
+  copy_env_files "$n"
+  reset_gate_state "$n"
   # Runs from inside the worktree instead of passing `--worktree` to claude,
   # so the branch name stays the one `ensure_worker_worktree` decided. `exec`
   # keeps $WORKER_PID pointing at the actual claude process, not the subshell.
@@ -261,22 +263,16 @@ main() {
 
     # Claim-and-verify: grab the issue by assignee, re-read, and back off if
     # someone else (a teammate, the nightly cron) won the race.
-    if [ -n "$ME" ]; then
-      gh issue edit "$N" --add-assignee "@me" 2>/dev/null || true
-      OTHERS=$(gh issue view "$N" --json assignees --jq "[.assignees[].login] | map(select(. != \"$ME\")) | length" 2>/dev/null || echo 0)
-      if [ "${OTHERS:-0}" -gt 0 ]; then
-        echo "⚔ #$N ya está reclamado por otra persona, lo salto"
-        gh issue edit "$N" --remove-assignee "@me" 2>/dev/null || true
-        SKIPPED="${SKIPPED:-} $N"
-        PROCESSED=$((PROCESSED + 1))        # cuenta como intento: nunca bucle infinito
-        sleep $((RANDOM % 8 + 3))           # jitter: rompe el ping-pong entre dos corredores
-        continue
-      fi
+    if ! claim_issue "$N"; then
+      echo "⚔ #$N ya está reclamado por otra persona, lo salto"
+      SKIPPED="${SKIPPED:-} $N"
+      PROCESSED=$((PROCESSED + 1))        # cuenta como intento: nunca bucle infinito
+      sleep $((RANDOM % 8 + 3))           # jitter: rompe el ping-pong entre dos corredores
+      continue
     fi
 
     # Deterministic bookkeeping: don't rely on the worker remembering to do it.
-    gh issue edit "$N" --add-label "in-progress" --remove-label "pending" 2>/dev/null || true
-    bash "$SCRIPT_DIR/task-status.sh" "$N" "In Progress" 2>/dev/null || true
+    mark_in_progress "$N"
 
     run_worker "$N"
     WORKER_LAUNCHED=1
@@ -292,17 +288,7 @@ main() {
       kill -0 "$WORKER_PID" 2>/dev/null || break
       ELAPSED_MIN=$(( ($(date +%s) - START_TS) / 60 ))
       if [ -d "$WT_DIR" ]; then
-        # Untracked files never travel to worktrees, so hand the worker every
-        # local env file (gitignored, stays on this machine) so integration
-        # tests and migrations can run against the real services.
-        for envf in .env .env.*; do
-          [ -f "$envf" ] || continue
-          git ls-files --error-unmatch "$envf" >/dev/null 2>&1 && continue  # tracked (e.g. .env.example) travels on its own
-          if [ ! -f "$WT_DIR/$envf" ]; then
-            cp "$envf" "$WT_DIR/$envf"
-            echo "  🔑 $envf copiado al worktree del worker"
-          fi
-        done
+        copy_env_files "$N"
         # Read the worktree by its PATH, because workers name their branches freely.
         COMMIT=$(git -C "$WT_DIR" log --oneline -1 2>/dev/null || echo "(worktree sin commits aún)")
       else

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Devuelve una issue a la cola o la marca para una persona. Uso: fabrica-release <N> --pending | --needs-human "motivo"
+exec bash "$(dirname "$(readlink -f "$0")")/../scripts/issue-queue.sh" release "$@"

@@ -41,8 +41,10 @@ uncommitted_setup() {
 # Un worker `claude -p` carga el plugin solo si está instalado y habilitado
 # para el proyecto, y si no lo está corre sin Stop gate ni revisores sin
 # avisar. Se comprueba antes de lanzar ninguno.
-check_plugin_ready() {
-  bash "$SCRIPT_DIR/fabrica-setup.sh" check || return 1
+# El worktree de una issue sale de origin/<base>: lo que no esté commiteado
+# y subido ahí no le llega. Falla y dice qué hacer si la configuración de la
+# fábrica de esta copia no coincide con la base.
+check_setup_on_base() {
   local pending ref behind
   if ! git fetch -q origin "$(base_branch)" 2>/dev/null && git remote get-url origin > /dev/null 2>&1; then
     echo "⚠ No pude traer origin/$(base_branch): comparo con la copia que hay en esta máquina, que puede estar vieja." >&2
@@ -67,6 +69,11 @@ check_plugin_ready() {
     } >&2
     return 1
   fi
+}
+
+check_plugin_ready() {
+  bash "$SCRIPT_DIR/fabrica-setup.sh" check || return 1
+  check_setup_on_base || return 1
   local want state
   want=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
     "$PLUGIN_ROOT/.claude-plugin/plugin.json" | head -n 1)
@@ -222,4 +229,60 @@ ensure_worker_worktree() {  # issue number
   else
     git worktree add -b "$branch" "$wt_dir"
   fi
+}
+
+# Reclama la issue por assignee y la vuelve a leer: si otra persona (un
+# compañero, el cron de la nube) ganó la carrera, suelta el reclamo.
+# Devuelve 0 si la issue es nuestra y 2 si es de otro. Sin usuario de gh (ME
+# vacío) no hay reclamo posible y la da por nuestra.
+claim_issue() {  # issue number
+  local n="$1" others
+  [ -n "${ME:-}" ] || return 0
+  gh issue edit "$n" --add-assignee "@me" 2>/dev/null || true
+  others=$(gh issue view "$n" --json assignees --jq "[.assignees[].login] | map(select(. != \"$ME\")) | length" 2>/dev/null || echo 0)
+  if [ "${others:-0}" -gt 0 ]; then
+    gh issue edit "$n" --remove-assignee "@me" 2>/dev/null || true
+    return 2
+  fi
+  return 0
+}
+
+# Contabilidad determinista al empezar una issue: no depende de que el modelo
+# se acuerde.
+mark_in_progress() {  # issue number
+  gh issue edit "$1" --add-label "in-progress" --remove-label "pending" 2>/dev/null || true
+  bash "$SCRIPT_DIR/task-status.sh" "$1" "In Progress" 2>/dev/null || true
+}
+
+# Los archivos sin seguimiento no viajan a los worktrees: se copian los .env
+# locales (ignorados por git, se quedan en esta máquina) para que los tests de
+# integración y las migraciones corran contra los servicios de verdad. Los que
+# git sigue, como .env.example, ya viajan solos.
+copy_env_files() {  # issue number
+  local wt_dir envf
+  wt_dir=$(worktree_dir_for "$1")
+  [ -d "$wt_dir" ] || return 0
+  for envf in .env .env.*; do
+    [ -f "$envf" ] || continue
+    git ls-files --error-unmatch "$envf" >/dev/null 2>&1 && continue
+    if [ ! -f "$wt_dir/$envf" ]; then
+      cp "$envf" "$wt_dir/$envf"
+      echo "  🔑 $envf copiado al worktree de #$1" >&2
+    fi
+  done
+}
+
+# Una issue que se retoma no hereda los intentos del Stop gate de la corrida
+# anterior: el contador y el rastro de rendición viven en el worktree.
+reset_gate_state() {  # issue number
+  local wt_dir
+  wt_dir=$(worktree_dir_for "$1")
+  rm -f "$wt_dir/.factory/state/stop-gate-count" "$wt_dir/.factory/gate-gave-up"
+}
+
+# Devuelve la issue a la cola: pending, sin assignee y la tarjeta en Todo.
+release_to_queue() {  # issue number
+  gh issue edit "$1" --add-label pending --remove-label in-progress 2>/dev/null || true
+  [ -n "${ME:-}" ] && gh issue edit "$1" --remove-assignee "@me" 2>/dev/null || true
+  bash "$SCRIPT_DIR/task-status.sh" "$1" "Todo" 2>/dev/null || true
 }
