@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -262,6 +263,24 @@ describe("piezas del plugin", () => {
     ) as { name: string; version: string };
     expect(manifest.name).toBe("fabrica");
     expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  // Los comandos de bin/ quedan en el PATH del modelo y se ejecutan directo:
+  // sin el bit de ejecución en git, fallan con "Permission denied" en la
+  // nube y en cualquier copia nueva del plugin.
+  it("todos los comandos de bin/ son ejecutables en git", () => {
+    const listing = execFileSync(
+      "git",
+      ["ls-files", "-s", "--", "plugins/fabrica/bin"],
+      { cwd: REPO_ROOT, encoding: "utf8" },
+    );
+    const notExecutable = listing
+      .trim()
+      .split("\n")
+      .filter((line) => !line.startsWith("100755"))
+      .map((line) => line.split("\t")[1]);
+
+    expect(notExecutable).toEqual([]);
   });
 
   it("hooks.json solo llama scripts que existen", () => {
