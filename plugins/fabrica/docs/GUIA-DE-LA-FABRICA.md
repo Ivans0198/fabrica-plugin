@@ -324,12 +324,15 @@ reabre/reintenta. No necesitas comandos.
 
 **Los talleres de los obreros.** Cada ticket se trabaja en una copia aparte del
 repo (un _worktree_) dentro de `.claude/worktrees/impl-N`. No se commitean y no
-estorban, pero ocupan disco. Para ver y limpiar los viejos:
+estorban, pero ocupan disco. Para borrar los de issues ya cerradas:
 
 ```bash
-git worktree list
-git worktree remove .claude/worktrees/impl-15 --force   # ya mergeado
+fabrica-cleanup --dry-run   # lista lo que borraría
+fabrica-cleanup             # los borra
 ```
+
+Deja los que tienen cambios sin commitear, y la rama local de un PR mergeado
+con squash: avisa en vez de borrar trabajo.
 
 ## Parte 5. ¿Y si algo sale mal?
 

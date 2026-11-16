@@ -310,3 +310,43 @@ ensure_branch_in_place() {  # issue number
     git checkout -q -b "$branch"
   fi
 }
+
+# Borra los worktrees de las issues ya cerradas. Uno con cambios sin
+# commitear se deja y se avisa: `git worktree remove` sin --force se niega
+# solo, y los archivos ignorados (node_modules, los .env copiados) no cuentan.
+# La rama local se borra solo si ya está en la base; un PR mergeado con
+# squash la deja afuera, y entonces se avisa en vez de borrar trabajo.
+# Con "dry-run" como argumento solo lista. Imprime en stdout lo que borra.
+cleanup_worktrees() {  # [dry-run]
+  local dry="${1:-}" dir n state base_ref
+  # El merge pasa en GitHub: sin traer la base, una rama ya mergeada parece
+  # pendiente.
+  git fetch -q origin "$(base_branch)" 2>/dev/null || true
+  base_ref=$(worker_base_ref)
+  for dir in .claude/worktrees/impl-*; do
+    [ -d "$dir" ] || continue
+    n="${dir##*impl-}"
+    [[ "$n" =~ ^[0-9]+$ ]] || continue
+    state=$(gh issue view "$n" --json state -q .state 2>/dev/null || echo "")
+    [ "$state" = CLOSED ] || continue
+    if [ -n "$(git -C "$dir" status --porcelain 2>/dev/null)" ]; then
+      echo "⚠ impl-$n: la issue está cerrada, pero tiene cambios sin commitear. Lo dejo." >&2
+      continue
+    fi
+    if [ "$dry" = dry-run ]; then
+      echo "impl-$n (la issue #$n está cerrada)"
+      continue
+    fi
+    if ! git worktree remove "$dir" 2>/dev/null; then
+      echo "⚠ impl-$n: git no pudo borrar el worktree. Lo dejo." >&2
+      continue
+    fi
+    if git merge-base --is-ancestor "impl-$n" "$base_ref" 2>/dev/null; then
+      git branch -q -D "impl-$n" 2>/dev/null || true
+      echo "impl-$n: worktree y rama borrados"
+    else
+      echo "impl-$n: worktree borrado; la rama queda porque no está en $base_ref (¿merge con squash?)"
+    fi
+  done
+  git worktree prune 2>/dev/null || true
+}

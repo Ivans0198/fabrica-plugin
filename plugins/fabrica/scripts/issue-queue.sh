@@ -8,9 +8,10 @@
 #   issue-queue.sh release N --pending          devuelve N a la cola
 #   issue-queue.sh release N --needs-human "m"  marca N para una persona
 #   issue-queue.sh done N                       ¿N ya tiene un PR que la cierre?
+#   issue-queue.sh cleanup [--dry-run]          borra worktrees de issues cerradas
 #
-# Los llaman fabrica-next-issue, fabrica-claim, fabrica-release y
-# fabrica-check-done. La salida útil va a stdout; los avisos, a stderr.
+# Los llaman fabrica-next-issue, fabrica-claim, fabrica-release,
+# fabrica-check-done y fabrica-cleanup. La salida útil va a stdout; los avisos, a stderr.
 
 set -euo pipefail
 
@@ -18,7 +19,7 @@ SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
 die() { echo "❌ $*" >&2; exit 1; }
 usage() {
-  sed -n '6,10p' "${BASH_SOURCE[0]}" | sed 's/^# *//' >&2
+  sed -n '6,11p' "${BASH_SOURCE[0]}" | sed 's/^# *//' >&2
   exit 64
 }
 
@@ -83,6 +84,13 @@ case "${1:-}" in
         [ -n "${4:-}" ] || die "Falta el motivo: fabrica-release $n --needs-human \"motivo\""
         flag_needs_human "$n" "🤖 **Necesita a una persona.** $4"
         ;;
+      *) usage ;;
+    esac
+    ;;
+  cleanup)
+    case "${2:-}" in
+      "") cleanup_worktrees ;;
+      --dry-run) cleanup_worktrees dry-run ;;
       *) usage ;;
     esac
     ;;

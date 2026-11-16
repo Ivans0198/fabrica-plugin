@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Borra los worktrees de las issues ya cerradas. Uso: fabrica-cleanup [--dry-run]
+exec bash "$(dirname "$(readlink -f "$0")")/../scripts/issue-queue.sh" cleanup "$@"

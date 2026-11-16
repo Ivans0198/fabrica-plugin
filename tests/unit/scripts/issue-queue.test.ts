@@ -341,6 +341,118 @@ describe("comandos de la cola", () => {
     TIMEOUT,
   );
 
+  describe("fabrica-cleanup", () => {
+    const worktree = (repo: string, n: number) =>
+      path.join(repo, `.claude/worktrees/impl-${n}`);
+
+    it(
+      "borra el worktree y la rama de una issue cerrada",
+      async () => {
+        const { repo, env } = await project();
+        await run(["claim", "5"], repo, env);
+
+        const { code, stdout } = await run(["cleanup"], repo, {
+          ...env,
+          FAKE_STATE_5: "CLOSED",
+        });
+
+        expect(code).toBe(0);
+        expect(stdout).toMatch(/impl-5/);
+        expect(existsSync(worktree(repo, 5))).toBe(false);
+        const branches = await git(repo, "git branch --list impl-5");
+        expect(branches.stdout.trim()).toBe("");
+      },
+      TIMEOUT,
+    );
+
+    // En fabrica-prueba, el PR #6 se mergeó en GitHub y origin/main local
+    // seguía viejo: la rama parecía sin mergear (2026-11-16).
+    it(
+      "trae la base antes de decidir si la rama ya está mergeada",
+      async () => {
+        const { repo, env } = await project();
+        const origin = path.join(dir, "origin.git");
+        const other = path.join(dir, "otra-copia");
+        await git(
+          dir,
+          `git init -q --bare -b main "${origin}" && git -C "${repo}" remote add origin "${origin}" && git -C "${repo}" push -q origin main && git -C "${repo}" fetch -q origin`,
+        );
+        await run(["claim", "5"], repo, env);
+        const wt = worktree(repo, 5);
+        await writeFile(path.join(wt, "nuevo.ts"), "export {};\n");
+        await git(
+          wt,
+          "git add nuevo.ts && git -c user.email=t@t.com -c user.name=t commit -q -m trabajo && git push -q origin impl-5",
+        );
+        // El merge pasa en GitHub, no en esta copia.
+        await git(
+          dir,
+          `git clone -q "${origin}" "${other}" && git -C "${other}" -c user.email=t@t.com -c user.name=t merge -q --no-ff origin/impl-5 -m merge && git -C "${other}" push -q origin main`,
+        );
+
+        const { code, stdout } = await run(["cleanup"], repo, {
+          ...env,
+          FAKE_STATE_5: "CLOSED",
+        });
+
+        expect(code).toBe(0);
+        expect(stdout).toMatch(/impl-5: worktree y rama borrados/);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      "deja el worktree de una issue abierta",
+      async () => {
+        const { repo, env } = await project();
+        await run(["claim", "5"], repo, env);
+
+        const { code } = await run(["cleanup"], repo, env);
+
+        expect(code).toBe(0);
+        expect(existsSync(worktree(repo, 5))).toBe(true);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      "deja y avisa un worktree con cambios sin commitear aunque la issue esté cerrada",
+      async () => {
+        const { repo, env } = await project();
+        await run(["claim", "5"], repo, env);
+        await writeFile(path.join(worktree(repo, 5), "a-medias.ts"), "x\n");
+
+        const { code, stderr } = await run(["cleanup"], repo, {
+          ...env,
+          FAKE_STATE_5: "CLOSED",
+        });
+
+        expect(code).toBe(0);
+        expect(existsSync(worktree(repo, 5))).toBe(true);
+        expect(stderr).toMatch(/impl-5.*sin commitear/);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      "con --dry-run solo lista lo que borraría",
+      async () => {
+        const { repo, env } = await project();
+        await run(["claim", "5"], repo, env);
+
+        const { code, stdout } = await run(["cleanup", "--dry-run"], repo, {
+          ...env,
+          FAKE_STATE_5: "CLOSED",
+        });
+
+        expect(code).toBe(0);
+        expect(stdout).toMatch(/impl-5/);
+        expect(existsSync(worktree(repo, 5))).toBe(true);
+      },
+      TIMEOUT,
+    );
+  });
+
   it(
     "rechaza un número de issue que no es un número",
     async () => {

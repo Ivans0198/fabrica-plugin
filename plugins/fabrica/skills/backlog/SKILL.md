@@ -36,6 +36,7 @@ Una issue por invocación, con la persona mirando.
 7. **Al terminar**, `ExitWorktree` con `keep` y resume: PR, `needs-human` o
    devuelta a la cola. Para la siguiente issue, sugiere `/clear` y volver a
    llamar `/fabrica:backlog`: cada issue empieza con el contexto limpio.
+   Los worktrees de issues ya cerradas se borran con `fabrica-cleanup`.
 
 Si la persona prefiere ver cada issue en otra terminal, después del paso 2
 dale el comando y para:
