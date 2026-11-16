@@ -11,17 +11,17 @@ Este README es la referencia técnica.
 
 ## Qué trae
 
-| Pieza                     | Dónde                                       | Qué hace                                                                                                                                                       |
-| ------------------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Stop gate                 | `hooks/stop-gate.sh`                        | Al final de cada turno corre los comandos de `factory.json`. Con alguno en rojo, no deja terminar.                                                             |
-| Formato al editar         | `hooks/post-edit-lint.sh`                   | Formatea cada archivo editado según `factory.json` → `format`.                                                                                                 |
-| Revisores                 | `agents/code-reviewer.md`, `ui-reviewer.md` | `fabrica:code-reviewer` y `fabrica:ui-reviewer`: contexto limpio, hallazgos Blocker, Major o Minor.                                                            |
-| Skills                    | `skills/`                                   | `fabrica:bootstrap`, `fabrica:spec`, `plan`, `tasks`, `issues`, `fabrica:write-ticket`, `fabrica:backlog`.                                                     |
-| Reglas                    | `rules/fabrica.md`, `rules/stacks/`         | Ciclo del issue, Definition of Done y perfiles de stack. `init` las copia a `.factory/rules/`.                                                                 |
-| Spec Kit                  | `speckit-bundle/`                           | Spec Kit 1.2.2 de `github/spec-kit` (MIT), con sus comandos en `commands/`. No son skills: solo los siguen `fabrica:spec`, `plan` y `tasks`. Nadie lo instala. |
-| Comandos para el modelo   | `bin/`                                      | `fabrica-cmd`, `fabrica-task-status`, `fabrica-setup`, `fabrica-backlog` y otros. Quedan en su PATH.                                                           |
-| Archivos de cada proyecto | `templates/`                                | Lo que `init` escribe en el proyecto: `CLAUDE.md`, `factory.json`, permisos y llamadas a los workflows.                                                        |
-| Reusable workflows        | `.github/workflows/` (raíz de este repo)    | Checks, la fábrica en la nube, menciones a `@claude`, etiquetas y líneas base visuales.                                                                        |
+| Pieza                     | Dónde                                       | Qué hace                                                                                                                                                                                              |
+| ------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Stop gate                 | `hooks/stop-gate.sh`                        | Al final de cada turno corre los comandos de `factory.json`. Con alguno en rojo, no deja terminar.                                                                                                    |
+| Formato al editar         | `hooks/post-edit-lint.sh`                   | Formatea cada archivo editado según `factory.json` → `format`.                                                                                                                                        |
+| Revisores                 | `agents/code-reviewer.md`, `ui-reviewer.md` | `fabrica:code-reviewer` y `fabrica:ui-reviewer`: contexto limpio, hallazgos Blocker, Major o Minor.                                                                                                   |
+| Skills                    | `skills/`                                   | `fabrica:bootstrap`, `fabrica:spec`, `plan`, `tasks`, `issues`, `fabrica:write-ticket`, `fabrica:backlog`.                                                                                            |
+| Reglas                    | `rules/fabrica.md`, `rules/stacks/`         | Ciclo del issue, Definition of Done y perfiles de stack. `init` las copia a `.factory/rules/`.                                                                                                        |
+| Spec Kit                  | `speckit-bundle/`                           | Spec Kit 1.2.2 de `github/spec-kit` (MIT), con sus comandos en `commands/`. No son skills: solo los siguen `fabrica:spec`, `plan` y `tasks`. Nadie lo instala.                                        |
+| Comandos para el modelo   | `bin/`                                      | `fabrica-cmd`, `fabrica-task-status`, `fabrica-setup`, `fabrica-backlog`, los de la cola (`fabrica-next-issue`, `fabrica-claim`, `fabrica-release`, `fabrica-check-done`) y otros. Quedan en su PATH. |
+| Archivos de cada proyecto | `templates/`                                | Lo que `init` escribe en el proyecto: `CLAUDE.md`, `factory.json`, permisos y llamadas a los workflows.                                                                                               |
+| Reusable workflows        | `.github/workflows/` (raíz de este repo)    | Checks, la fábrica en la nube, menciones a `@claude`, etiquetas y líneas base visuales.                                                                                                               |
 
 ## Instalar
 

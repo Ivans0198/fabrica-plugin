@@ -210,6 +210,29 @@ describe("planeación con Spec Kit", () => {
     expect(body).toContain("${CLAUDE_PLUGIN_ROOT}/skills/tasks/SKILL.md");
   });
 
+  it("el ciclo reclama con fabrica-claim y sigue en impl-N si ya está ahí", () => {
+    const rules = read("rules/fabrica.md").replace(/\s+/g, " ");
+
+    expect(rules).toContain("fabrica-next-issue");
+    expect(rules).toContain("fabrica-claim N");
+    expect(rules).toMatch(/already on `impl-N`[^.]*keep working there/);
+  });
+
+  it("fabrica:backlog trabaja en la sesión dentro del worktree, o lanza los workers si se pide", () => {
+    const body = read("skills/backlog/SKILL.md").replace(/\s+/g, " ");
+
+    for (const command of [
+      "fabrica-next-issue",
+      "fabrica-claim",
+      "EnterWorktree",
+      "fabrica-check-done",
+      "fabrica-release",
+      "fabrica-backlog",
+    ]) {
+      expect(body, command).toContain(command);
+    }
+  });
+
   it("fabrica:tasks no encadena las issues: espera el merge", () => {
     const body = read("skills/tasks/SKILL.md");
 

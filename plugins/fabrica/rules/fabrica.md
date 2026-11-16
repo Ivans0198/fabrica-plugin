@@ -144,6 +144,7 @@ Execute these steps IN ORDER:
 
 1. **Pick** the next `pending` issue that is not blocked (lowest number first,
    respecting `priority:high` > `priority:medium` > `priority:low`).
+   `fabrica-next-issue` prints it, applying exactly this rule.
 
 2. **Already-done check (idempotency), BEFORE writing any code.** Verify the
    issue isn't already implemented: if every acceptance criterion is met by
@@ -152,10 +153,17 @@ Execute these steps IN ORDER:
    commits/PRs), remove `in-progress`, and close it. Re-queued or duplicated
    tickets are normal; re-implementing them is not.
 
-3. **Claim**: `gh issue edit N --add-label "in-progress" --remove-label "pending"`,
-   create branch `impl-N`, and if a board is configured run
-   `fabrica-task-status N "In Progress"` (no-op without
-   `.plan/project.json`).
+3. **Claim**: `fabrica-claim N`. It claims the issue by assignee (exit 2:
+   someone else has it, pick another), labels it `in-progress`, moves its
+   board card, and prepares the worktree `.claude/worktrees/impl-N` on branch
+   `impl-N`, with the local `.env` files and a fresh Stop gate budget. It
+   prints the worktree path: work inside it (in an interactive session, enter
+   it with `EnterWorktree` and that path). If you are already on `impl-N` (a
+   worker launched in its worktree, or a claim that already ran), keep working
+   there and never create a second branch. Where `fabrica-claim` is not
+   available, do the same by hand: `gh issue edit N --add-label "in-progress"
+--remove-label "pending"`, branch `impl-N`, and
+   `fabrica-task-status N "In Progress"`.
 
 4. **TDD** until green (Definition of Done items 1–3). Before opening the PR,
    sync with main: `git fetch origin && git rebase origin/main`.
