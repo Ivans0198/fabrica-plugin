@@ -29,4 +29,17 @@ interactiva y para.
 5. Commit y push a la misma rama (`git commit -m "Plan de <nombre> (#<N>)"`,
    `git push`). El PR se actualiza solo.
 
-Termina diciendo que lo siguiente es `/fabrica:tasks` en esta misma rama.
+## Sigues o paras
+
+**Sigues con las tareas** si se cumple todo esto:
+
+- el Constitution Check quedó sin violaciones, o cada una está justificada en
+  "Complexity Tracking";
+- `plan.md` y `research.md` no tienen ningún `[NEEDS CLARIFICATION`;
+- la persona no pidió parar después del plan.
+
+Entonces dilo en una línea y sigue en la misma sesión y la misma rama: lee
+`${CLAUDE_PLUGIN_ROOT}/skills/tasks/SKILL.md` y síguelo.
+
+**Si no, paras**, dices qué falta y que lo siguiente es `/fabrica:tasks` en
+esta misma rama.

@@ -2,3 +2,4 @@ node_modules/
 
 # El plan es local: no se publica.
 docs/plan-fabrica-plugin-spec-kit.md
+docs/analisis-ejecucion-issues.md

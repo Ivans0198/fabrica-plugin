@@ -193,6 +193,29 @@ describe("planeación con Spec Kit", () => {
     expect(spec).toMatch(/Refs #<N>/);
     expect(spec).toMatch(/\*\*nunca\*\* `Closes #<N>`/);
   });
+
+  // Los skills de planeación tienen disable-model-invocation: el modelo no
+  // puede invocar el siguiente, así que lo encadena leyendo su SKILL.md.
+  it("fabrica:spec sigue con el plan si no quedan dudas en la spec", () => {
+    const body = read("skills/spec/SKILL.md").replace(/\s+/g, " ");
+
+    expect(body).toMatch(/\[NEEDS CLARIFICATION/);
+    expect(body).toContain("${CLAUDE_PLUGIN_ROOT}/skills/plan/SKILL.md");
+  });
+
+  it("fabrica:plan sigue con las tareas si pasa el Constitution Check", () => {
+    const body = read("skills/plan/SKILL.md").replace(/\s+/g, " ");
+
+    expect(body).toMatch(/Constitution Check[^.]*sin violaciones/);
+    expect(body).toContain("${CLAUDE_PLUGIN_ROOT}/skills/tasks/SKILL.md");
+  });
+
+  it("fabrica:tasks no encadena las issues: espera el merge", () => {
+    const body = read("skills/tasks/SKILL.md");
+
+    expect(body).not.toContain("skills/issues/SKILL.md");
+    expect(body).toMatch(/mergees/);
+  });
 });
 
 describe("piezas del plugin", () => {

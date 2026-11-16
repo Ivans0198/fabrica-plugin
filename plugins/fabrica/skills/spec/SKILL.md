@@ -11,6 +11,8 @@ La planeación son cuatro pasos: `/fabrica:spec`, `/fabrica:plan`, `/fabrica:tas
 y, después del merge, `/fabrica:issues`. Los tres primeros trabajan en la rama
 `spec-<N>` y en un solo PR en borrador, con N el número de la issue de la
 épica. El merge de ese PR es la aprobación de la spec, el plan y las tareas.
+Si no quedan dudas, cada paso sigue solo con el siguiente hasta las tareas;
+después del merge, `/fabrica:issues` siempre lo pide la persona.
 
 Necesita a una persona en la sesión: hace preguntas y crea la épica. Si te
 llegó por un worker headless o por una mención `@claude`, responde que la
@@ -94,10 +96,27 @@ planeación se hace en una sesión interactiva y para.
    cerraría la épica antes de que tenga historias. Explica que el merge aprueba
    spec, plan y tareas, y que faltan `/fabrica:plan` y `/fabrica:tasks`.
 
-## Dónde paras
+## Sigues o paras
+
+**Sigues con el plan** si se cumple todo esto:
+
+- las aclaraciones terminaron y la persona respondió todas;
+- `spec.md` no tiene ningún `[NEEDS CLARIFICATION`;
+- la persona no pidió parar después de la spec.
+
+Entonces dilo en una línea y sigue en la misma sesión y la misma rama: lee
+`${CLAUDE_PLUGIN_ROOT}/skills/plan/SKILL.md` y síguelo. Las indicaciones
+técnicas son las que la persona haya dado; si no dio ninguna, el plan parte
+del stack de `factory.json` y su perfil.
+
+> Spec lista en `specs/12-favoritos/`, PR #13 (épica #12). No quedan dudas:
+> sigo con el plan.
+
+**Si no, paras** y dices qué falta:
 
 > Listo: la spec de favoritos está en `specs/12-favoritos/`, en el PR #13
-> (épica #12). Lo siguiente es `/fabrica:plan` en esta misma rama.
+> (épica #12). Queda una duda en la spec: <cuál>. Cuando esté resuelta, lo
+> siguiente es `/fabrica:plan` en esta misma rama.
 
 Si la persona decide no seguir con la feature y cierra el PR sin merge,
 recuérdale cerrar también la épica como "not planned"

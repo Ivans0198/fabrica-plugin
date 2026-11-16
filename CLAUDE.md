@@ -20,10 +20,12 @@ de la fase.
 
 ## Publicación
 
-Todo queda en commits locales hasta que se publique el plugin: sin push, sin
-fork y sin tocar remotos. Con la política actual de la organización, Claude
-no puede hacer `git push` ni lanzar workers headless (`claude -p`): el push
-lo hace una persona.
+El plugin está en `Ivans0198/fabrica-plugin`, privado. Los proyectos usan sus
+workflows por el tag de la versión.
+
+- Claude puede hacer push de ramas de trabajo.
+- Push a `main` y tags nuevos, solo con el OK de la persona.
+- Nunca `--force`, ni fork, ni cambiar remotos.
 
 ## Tests
 
