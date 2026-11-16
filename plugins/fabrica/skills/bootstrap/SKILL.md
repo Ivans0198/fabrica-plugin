@@ -408,7 +408,13 @@ commit). Y entonces lo importante: **no empiezas a trabajar nada.**
 
 ### 4.1 Las llaves de la nube (informativo)
 
-Corre `gh secret list`. Si falta `CLAUDE_CODE_OAUTH_TOKEN` (la bolsa del cron)
+Primero, la GitHub App de Claude: sin ella, cada corrida en la nube falla
+antes de empezar con `401 ... Claude Code is not installed on this
+repository`. Se instala una vez por cuenta, en github.com/apps/claude →
+Install, eligiendo este repo o todos. No se puede comprobar con `gh`: solo
+una App lista sus instalaciones. Pídele que confirme que la instaló.
+
+Después, corre `gh secret list`. Si falta `CLAUDE_CODE_OAUTH_TOKEN` (la bolsa del cron)
 o `CLAUDE_TOKEN_<USUARIO_EN_MAYUSCULAS>` (el token personal, para menciones y
 `ready-for-dev`), recuérdale los comandos exactos (ambos llevan el mismo valor):
 
@@ -417,8 +423,10 @@ gh secret set CLAUDE_CODE_OAUTH_TOKEN
 gh secret set CLAUDE_TOKEN_SU_USUARIO
 ```
 
-Los workflows buscan `CLAUDE_TOKEN_<USUARIO>` por nombre, así que no hay que
-editarlos para sumar a una persona. Si el repo del plugin es privado, falta
+`gh secret set` pide el valor sin mostrarlo, así que tiene que correrse en una
+terminal normal: desde Claude, con `!`, no hay dónde pegarlo y el secreto
+queda vacío. Los workflows buscan `CLAUDE_TOKEN_<USUARIO>` por nombre, así que
+no hay que editarlos para sumar a una persona. Si el repo del plugin es privado, falta
 además `FABRICA_PLUGIN_TOKEN`: un token que pueda leer ese repo.
 
 ### 4.1.5 El placeholder que no puedes rellenar tú (informativo)

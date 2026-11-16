@@ -234,6 +234,31 @@ describe("planeación con Spec Kit", () => {
     }
   });
 
+  // Sin la GitHub App de Claude en el repo, la nube falla con un 401 antes de
+  // empezar (fabrica-prueba, 2026-11-16). gh no puede comprobarlo: solo una
+  // App lista sus instalaciones. Por eso se pide y se nombra al fallar.
+  it("el cierre del bootstrap pide instalar la GitHub App de Claude", () => {
+    const keys = read("skills/bootstrap/SKILL.md").split(
+      "### 4.1 Las llaves de la nube",
+    )[1]!;
+    const section = keys.split("### 4.1.5")[0]!.replace(/\s+/g, " ");
+
+    expect(section).toContain("github.com/apps/claude");
+    expect(section).toMatch(/401/);
+  });
+
+  it("el aviso de falla de la nube nombra la GitHub App", () => {
+    const workflow = readFileSync(
+      path.join(REPO_ROOT, ".github/workflows/claude-backlog.yml"),
+      "utf8",
+    );
+    const note = workflow
+      .split("\n")
+      .find((line) => line.includes("La corrida en la nube falló"));
+
+    expect(note).toContain("github.com/apps/claude");
+  });
+
   it("fabrica:tasks no encadena las issues: espera el merge", () => {
     const body = read("skills/tasks/SKILL.md");
 

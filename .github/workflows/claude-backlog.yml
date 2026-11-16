@@ -202,4 +202,4 @@ jobs:
           NUM: ${{ github.event.issue.number }}
         run: |
           gh issue edit "$NUM" --repo "$GITHUB_REPOSITORY" --add-label needs-human || true
-          gh issue comment "$NUM" --repo "$GITHUB_REPOSITORY" --body "🤖 **La corrida en la nube falló** antes de completar este issue. Los logs están en la pestaña Actions. Causas típicas: cuota o créditos agotados, un secreto sin configurar, un error del entorno. Si alcanzó a crearse la rama del PR, el trabajo parcial está ahí. Para reintentar: resuelve la causa y vuelve a poner la etiqueta \`ready-for-dev\` (quítala primero si sigue puesta)." || true
+          gh issue comment "$NUM" --repo "$GITHUB_REPOSITORY" --body "🤖 **La corrida en la nube falló** antes de completar este issue. Los logs están en la pestaña Actions. Causas típicas: la GitHub App de Claude sin instalar en el repo (github.com/apps/claude → Install), cuota o créditos agotados, un secreto sin configurar, un error del entorno. Si alcanzó a crearse la rama del PR, el trabajo parcial está ahí. Para reintentar: resuelve la causa y vuelve a poner la etiqueta \`ready-for-dev\` (quítala primero si sigue puesta)." || true
