@@ -212,13 +212,15 @@ plugin_enabled() {
 GITIGNORE_BLOCK='# fabrica: de .factory/ se commitean las reglas, la versión y el manifiesto;
 # lo demás es estado de las corridas. Los .fabrica-new son para combinar.
 # .specify/ (Spec Kit) lo arma fabrica-setup speckit en cada máquina.
+# .claude/worktrees/ tiene una copia del repo por cada issue en curso.
 .factory/*
 !.factory/rules/
 !.factory/version
 !.factory/manifest.json
 *.fabrica-new
 .specify/
-.specify.tmp.*/'
+.specify.tmp.*/
+.claude/worktrees/'
 
 ensure_gitignore() {
   local changed=0
@@ -236,7 +238,7 @@ ensure_gitignore() {
   fi
   # Proyectos iniciados antes de que el bloque trajera estas líneas.
   local line
-  for line in '*.fabrica-new' '.specify/' '.specify.tmp.*/'; do
+  for line in '*.fabrica-new' '.specify/' '.specify.tmp.*/' '.claude/worktrees/'; do
     if ! tr -d '\r' < .gitignore | grep -qxF -- "$line"; then
       printf '%s\n' "$line" >> .gitignore
       changed=1

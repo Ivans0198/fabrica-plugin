@@ -196,6 +196,20 @@ describe("fabrica-setup init", () => {
   );
 
   it(
+    "ignora los worktrees de las issues, para que el checkout principal no quede sucio",
+    () => {
+      const dir = gitRepo();
+
+      setup(dir, ["init"]);
+
+      expect(isIgnored(dir, ".claude/worktrees/impl-7/package.json")).toBe(
+        true,
+      );
+    },
+    TIMEOUT,
+  );
+
+  it(
     "escribe los permisos del proyecto sin hooks propios, que ahora trae el plugin",
     () => {
       const dir = gitRepo();
