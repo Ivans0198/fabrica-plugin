@@ -130,6 +130,7 @@ jobs:
           fi
 
       - name: Run Claude Code on the issue / backlog
+        id: claude
         uses: anthropics/claude-code-action@v1
         with:
           # El runner no tiene el .env.local del proyecto. Si los tests de
@@ -149,6 +150,29 @@ jobs:
           # se queda sin turnos a mitad de ticket no alcanza ni a commitear lo
           # que ya tenía verde.
           claude_args: "--max-turns ${{ github.event_name == 'schedule' && 1000 || 200 }} --model ${{ env.FACTORY_MODEL }} --disallowedTools ${{ env.WORKER_DISALLOWED_TOOLS }}"
+
+      # Sin esto no hay forma de ver qué hizo el agente: la Action oculta su
+      # salida, también en modo debug. Repos privados: la ven quienes ya
+      # tienen acceso al repo.
+      - name: Guarda la transcripción del agente
+        if: always() && steps.claude.outputs.execution_file != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: transcripcion-agente-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.claude.outputs.execution_file }}
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # Un job en verde no prueba que haya PR: el agente puede terminar sin
+      # abrirlo. Una issue en in-progress sin PR deja de ser elegible para
+      # siempre, así que pasa a needs-human con el motivo.
+      - name: Marca la issue si el agente terminó sin PR
+        if: success() && github.event_name == 'issues'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUM: ${{ github.event.issue.number }}
+        run: |
+          fabrica-check-done "$NUM" || fabrica-release "$NUM" --needs-human "La corrida en la nube terminó sin abrir un PR con \`Closes #$NUM\`. La transcripción del agente está en los artefactos de la corrida, en la pestaña Actions."
 
       - name: Deja una nota en el issue si la corrida falló
         if: failure() && github.event_name == 'issues'

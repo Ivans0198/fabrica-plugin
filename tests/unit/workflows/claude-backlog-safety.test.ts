@@ -1,0 +1,60 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { load } from "js-yaml";
+import { describe, expect, it } from "vitest";
+import { REPO_ROOT } from "../../support/plugin-paths";
+
+/**
+ * La primera corrida real en la nube (fabrica-prueba, 2026-11-16) terminó en
+ * verde sin PR y dejó la issue en `in-progress`: el aviso de falla solo
+ * corre si el job falla, y la transcripción del agente quedó dentro del
+ * runner, sin forma de ver qué hizo.
+ */
+
+interface Step {
+  name?: string;
+  id?: string;
+  uses?: string;
+  if?: string;
+  run?: string;
+  with?: Record<string, unknown>;
+}
+
+const workflow = load(
+  readFileSync(
+    path.join(REPO_ROOT, ".github/workflows/claude-backlog.yml"),
+    "utf8",
+  ),
+) as { jobs: Record<string, { steps: Step[] }> };
+const steps = Object.values(workflow.jobs).flatMap((job) => job.steps);
+const agent = steps.find((s) =>
+  s.uses?.startsWith("anthropics/claude-code-action"),
+);
+
+describe("claude-backlog.yml después del agente", () => {
+  it("el paso del agente tiene id, para leer sus salidas", () => {
+    expect(agent?.id).toBe("claude");
+  });
+
+  it("si el job quedó en verde sin PR, la issue va a needs-human con un motivo", () => {
+    const net = steps.find((s) => s.run?.includes("fabrica-check-done"));
+
+    expect(net?.if).toMatch(/success\(\)/);
+    expect(net?.if).toMatch(/github\.event_name == 'issues'/);
+    expect(net?.run).toMatch(
+      /fabrica-check-done "\$NUM" \|\| fabrica-release "\$NUM" --needs-human/,
+    );
+  });
+
+  it("sube la transcripción del agente como artefacto, aunque la corrida falle", () => {
+    const upload = steps.find((s) =>
+      s.uses?.startsWith("actions/upload-artifact"),
+    );
+
+    expect(upload?.if).toMatch(/always\(\)/);
+    expect(String(upload?.with?.path)).toContain(
+      "steps.claude.outputs.execution_file",
+    );
+    expect(Number(upload?.with?.["retention-days"])).toBeLessThanOrEqual(7);
+  });
+});
