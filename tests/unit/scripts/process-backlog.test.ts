@@ -238,6 +238,7 @@ async function installFakeClaude(
   const logFile = path.join(cwd, "claude-calls.log");
   const script = `#!/usr/bin/env bash
 echo "$@" >> "${toBashPath(logFile)}"
+echo "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=\${CLAUDE_CODE_DISABLE_BACKGROUND_TASKS:-}" >> "${toBashPath(logFile)}"
 exit 0
 `;
   await writeFile(claudePath, script);
@@ -782,6 +783,33 @@ describe("lanzamiento del worker", () => {
           ),
         ),
       ).toBe(true);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // Con las tareas en segundo plano, el worker lanza al revisor, termina su
+  // turno esperando la notificación, y `claude -p` se cierra sin la
+  // respuesta: no hay PR (probado el 2026-11-16).
+  it(
+    "lanza al worker con los subagentes en primer plano",
+    async () => {
+      workDir = await setupWorkDir();
+      const { binDir, logFile } = await installFakeClaude(workDir);
+
+      const { code } = await runBash(
+        'source scripts/process-backlog.sh; run_worker 77; wait "$WORKER_PID"',
+        workDir,
+        {
+          ...process.env,
+          PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "",
+        },
+      );
+
+      expect(code).toBe(0);
+      expect(await readLog(logFile)).toContain(
+        "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1",
+      );
     },
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );

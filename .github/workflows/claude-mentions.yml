@@ -110,6 +110,10 @@ jobs:
       - name: Run Claude on the mention
         uses: anthropics/claude-code-action@v1
         env:
+          # Los subagentes en primer plano: en segundo plano, el agente lanza al
+          # revisor, termina su turno esperando la notificación y la sesión se
+          # cierra sin la respuesta (probado el 2026-11-16).
+          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
           # Esta corrida responde en el hilo y no produce código: el Stop gate
           # no tiene nada que verificar.
           FACTORY_GATE: "off"

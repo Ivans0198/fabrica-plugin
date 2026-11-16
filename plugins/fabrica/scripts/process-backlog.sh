@@ -225,6 +225,10 @@ run_worker() {
   # keeps $WORKER_PID pointing at the actual claude process, not the subshell.
   (
     cd "$wt_dir"
+    # Los subagentes en primer plano: en segundo plano, el worker lanza al
+    # revisor, termina su turno esperando la notificación y `claude -p` se
+    # cierra sin la respuesta (probado el 2026-11-16).
+    export CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
     exec claude -p "Process GitHub issue #$n following the issue lifecycle in CLAUDE.md:
   read the issue with 'gh issue view $n', label it in-progress, work on branch impl-$n,
   TDD until the Definition of Done is met, run fabrica:code-reviewer (and fabrica:ui-reviewer

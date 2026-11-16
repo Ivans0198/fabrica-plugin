@@ -132,6 +132,11 @@ jobs:
       - name: Run Claude Code on the issue / backlog
         id: claude
         uses: anthropics/claude-code-action@v1
+        env:
+          # Los subagentes en primer plano: en segundo plano, el agente lanza al
+          # revisor, termina su turno esperando la notificación y la sesión se
+          # cierra sin la respuesta (probado el 2026-11-16).
+          CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
         with:
           # El runner no tiene el .env.local del proyecto. Si los tests de
           # integración necesitan servicios reales, sus valores van como

@@ -58,3 +58,24 @@ describe("claude-backlog.yml después del agente", () => {
     expect(Number(upload?.with?.["retention-days"])).toBeLessThanOrEqual(7);
   });
 });
+
+describe("los agentes de la nube", () => {
+  it.each(["claude-backlog.yml", "claude-mentions.yml"])(
+    "%s corre los subagentes en primer plano, o la sesión termina sin la respuesta del revisor",
+    (file) => {
+      const wf = load(
+        readFileSync(path.join(REPO_ROOT, ".github/workflows", file), "utf8"),
+      ) as {
+        jobs: Record<
+          string,
+          { steps: (Step & { env?: Record<string, string> })[] }
+        >;
+      };
+      const step = Object.values(wf.jobs)
+        .flatMap((job) => job.steps)
+        .find((s) => s.uses?.startsWith("anthropics/claude-code-action"));
+
+      expect(step?.env?.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS).toBe("1");
+    },
+  );
+});
