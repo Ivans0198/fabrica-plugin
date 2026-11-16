@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Mueve la tarjeta de una issue en el tablero. Uso: fabrica-task-status <N> "<estado>"
+exec bash "$(dirname "$(readlink -f "$0")")/../scripts/task-status.sh" "$@"

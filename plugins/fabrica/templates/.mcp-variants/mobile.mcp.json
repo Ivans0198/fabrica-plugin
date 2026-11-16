@@ -1,0 +1,10 @@
+{
+  "_comment": "Mobile variant. Replace .mcp.json with this file when the project is a mobile app (React Native/Expo, native). Gives Claude eyes on iOS simulators / Android emulators / real devices instead of the browser. Also set factory.json → commands.e2e to the Maestro/Detox command. iOS simulator requires macOS.",
+  "mcpServers": {
+    "mobile": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "@mobilenext/mobile-mcp@latest"]
+    }
+  }
+}

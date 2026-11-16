@@ -1,0 +1,179 @@
+#!/usr/bin/env bash
+# Stop gate: Claude cannot finish the session while these checks fail.
+# Exit code 2 = block (Claude receives stderr and keeps iterating).
+# Exit code 0 = allow finish.
+#
+# Los comandos salen de factory.json (commands.lint, typecheck, test, e2e), así
+# que el gate sirve para cualquier stack sin editarlo. Un comando en null está
+# apagado a propósito y no se corre. Keep the cheapest checks first so
+# failures surface fast.
+
+set -o pipefail
+
+# shellcheck source=../../scripts/lib/factory-config.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../scripts/lib/factory-config.sh"
+
+# Kill switch: sessions that only answer questions (e.g. @claude mentions that
+# just reply in a thread) never produce code, so verifying them with lint,
+# types and tests protects nothing, it only traps them. Exit before touching
+# the retry counter file, so a worker session running in parallel keeps its
+# own count untouched.
+if [ "${FACTORY_GATE:-}" = "off" ]; then
+  exit 0
+fi
+
+# Todo lo de abajo es relativo a la raíz del proyecto (factory.json,
+# .factory/). La sesión puede haber quedado en una subcarpeta.
+if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
+  cd "$CLAUDE_PROJECT_DIR" || { echo "❌ Stop gate: no pude entrar a $CLAUDE_PROJECT_DIR" >&2; exit 2; }
+fi
+
+# Anti-infinite-loop guard: after MAX_GATE_RUNS blocked attempts, let Claude
+# stop so it can label the issue needs-human instead of looping forever. The
+# counter lives in the checkout (.factory/ is gitignored), so each worktree
+# keeps its own. MAX_GATE_RUNS is the correction budget in rules/fabrica.md
+# ("Budget: N correction cycles"): change both together.
+COUNTER_FILE=".factory/state/stop-gate-count"
+MAX_GATE_RUNS="${MAX_GATE_RUNS:-5}"
+COUNT=$(cat "$COUNTER_FILE" 2>/dev/null || echo 0)
+
+# Pre-bootstrap guard: without factory.json the project has no real commands
+# yet (the template ships factory.example.json; /bootstrap writes the real
+# one), so the gate would be unsatisfiable. Arm it only after bootstrap.
+if [ ! -f "$FACTORY_CONFIG_FILE" ]; then
+  rm -f "$COUNTER_FILE"
+  exit 0
+fi
+
+# Review-only guard: if the session changed nothing beyond generated noise
+# (clean tree modulo GENERATED_NOISE_FILES, no commits beyond upstream),
+# there is nothing to verify. Don't run the full suite just to end a Q&A
+# session. Any failure to determine "ahead" counts as ahead, so worker
+# sessions with local commits always get checked. Some dev servers rewrite
+# files on every run (`next dev` does it to tsconfig.json and to the CLAUDE.md
+# agent block), and `npm install` rewrites package-lock.json, so without this
+# allowance the first gate run in a session dirties the tree and the guard can
+# never apply again.
+GENERATED_NOISE_FILES=("tsconfig.json" "package-lock.json" "CLAUDE.md" "AGENTS.md")
+
+is_generated_noise_file() {
+  local candidate="$1"
+  local noise_file
+  for noise_file in "${GENERATED_NOISE_FILES[@]}"; do
+    if [ "$candidate" = "$noise_file" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# `git status --porcelain` lines are "XY path": 2 status chars + 1 space
+# before the path.
+readonly PORCELAIN_STATUS_PREFIX_LEN=3
+
+only_generated_noise_is_dirty() {
+  local status_line
+  while IFS= read -r status_line; do
+    [ -z "$status_line" ] && continue
+    is_generated_noise_file "${status_line:$PORCELAIN_STATUS_PREFIX_LEN}" || return 1
+  done <<<"$(git status --porcelain 2>/dev/null)"
+  return 0
+}
+
+if only_generated_noise_is_dirty; then
+  AHEAD=$(git rev-list --count '@{upstream}..HEAD' 2>/dev/null || echo "?")
+  if [ "$AHEAD" = "0" ]; then
+    rm -f "$COUNTER_FILE"
+    exit 0
+  fi
+fi
+
+# Planning guard: a spec branch (fabrica:spec, plan, tasks) only changes
+# specs/ and docs/plan-maestro.md. There is no code to verify, and a red main
+# must not block writing a spec. Everything that changed since the branch left
+# the base (commits, edits and new files) has to be planning or generated
+# noise; anything else runs the full gate. Without origin/<base> it does not
+# apply.
+only_planning_changes() {
+  local base merge_base changed file
+  base=$(factory_read_value baseBranch 2>/dev/null)
+  base="${base:-main}"
+  merge_base=$(git merge-base HEAD "origin/$base" 2>/dev/null) || return 1
+  # --no-renames: a file moved from src/ to specs/ must show up as removed
+  # from src/, or moving code into specs/ would skip the gate.
+  changed=$({
+    git diff --no-renames --name-only "$merge_base" 2>/dev/null
+    git ls-files --others --exclude-standard 2>/dev/null
+  } | tr -d '\r' | sort -u)
+  [ -n "$changed" ] || return 1
+  while IFS= read -r file; do
+    case "$file" in
+      # .gitignore: `fabrica-setup speckit` adds .specify/ to it.
+      specs/* | docs/plan-maestro.md | .gitignore) ;;
+      *) is_generated_noise_file "$file" || return 1 ;;
+    esac
+  done <<<"$changed"
+  return 0
+}
+
+if only_planning_changes; then
+  rm -f "$COUNTER_FILE"
+  exit 0
+fi
+
+fail() {
+  mkdir -p "$(dirname "$COUNTER_FILE")"
+  echo "$((COUNT + 1))" > "$COUNTER_FILE"
+  if [ "$COUNT" -ge "$MAX_GATE_RUNS" ]; then
+    echo "Stop gate has blocked $COUNT times. Giving up." >&2
+    echo "MANDATORY before you stop: do NOT open or mark ready any PR; label the issue needs-human and comment what is still red." >&2
+    mkdir -p .factory && date > .factory/gate-gave-up   # rastro para el orquestador
+    rm -f "$COUNTER_FILE"
+    exit 0
+  fi
+  echo "$1" >&2
+  exit 2
+}
+
+# Corre commands.<name> de factory.json y bloquea si falla. Un comando en null
+# no se corre. Si factory.json está mal, eso también bloquea: un gate que no
+# puede leer qué verificar no puede dejar pasar nada.
+run_check() {
+  local name="$1" label="$2" status output
+  factory_read_command "$name"
+  status=$?
+  if [ "$status" -eq 3 ]; then
+    return 0
+  fi
+  if [ "$status" -ne 0 ]; then
+    fail "❌ $FACTORY_ERROR"
+  fi
+  if ! output=$("${FACTORY_CMD[@]}" 2>&1 < /dev/null); then
+    fail "❌ $label failed (${FACTORY_CMD[*]}). Fix before finishing:
+$output"
+  fi
+}
+
+# 0. The format rules are read by the post-edit hook, which never blocks; a
+# broken rule would silently stop formatting, so the gate is where it surfaces.
+FORMAT_ERROR=$(factory_format_error)
+if [ -n "$FORMAT_ERROR" ]; then
+  fail "❌ $FORMAT_ERROR"
+fi
+
+# 1. Lint
+run_check lint "Lint"
+
+# 2. Types
+run_check typecheck "Type check"
+
+# 3. Unit tests
+run_check test "Tests"
+
+# Los tests del kit no corren aquí: viven y corren en el repo del plugin.
+
+# 4. E2E: visual regression + accessibility, when the project has them.
+run_check e2e "E2E (visual/a11y)"
+
+rm -f "$COUNTER_FILE"
+exit 0

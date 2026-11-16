@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Corre un comando de factory.json por nombre. Uso: fabrica-cmd <test|lint|typecheck|build|install|e2e>
+exec bash "$(dirname "$(readlink -f "$0")")/../scripts/factory-cmd.sh" "$@"

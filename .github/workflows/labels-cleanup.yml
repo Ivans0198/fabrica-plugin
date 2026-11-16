@@ -1,0 +1,98 @@
+# Reusable workflow: contabilidad determinista de la cola. Cuando un issue se
+# cierra (por merge o a mano) le quita las etiquetas de cola, para que el
+# tablero y las etiquetas no se contradigan. Sin Claude: gratis, inmediato, con
+# el token de GitHub.
+#
+# También mantiene las épicas al día con sus sub-issues: cierra una épica
+# cuando ya no le queda ninguno abierto y la reabre si uno vuelve. Los eventos
+# `issues` cubren el cierre y la reapertura de un sub-issue. No cubren enganchar
+# a mano un sub-issue existente a una épica desde la interfaz, porque GitHub no
+# lo ofrece como disparador: eso lo atrapa la pasada diaria (`schedule`).
+name: labels-cleanup
+
+on:
+  workflow_call:
+    inputs:
+      fabrica_repo:
+        required: true
+        type: string
+      fabrica_ref:
+        required: true
+        type: string
+    secrets:
+      FABRICA_PLUGIN_TOKEN:
+        required: false
+
+jobs:
+  cleanup:
+    if: github.event_name == 'issues' && github.event.action == 'closed'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      # Declarar permisos deja en `none` todo lo que no se lista. Sin esto,
+      # el checkout de un repo privado falla con 403.
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      # Explícito en vez de inferido del remoto del checkout.
+      GH_REPO: ${{ github.repository }}
+      NUM: ${{ github.event.issue.number }}
+    steps:
+      - name: Quita las etiquetas de cola al cerrar
+        run: |
+          for l in in-progress pending needs-human ready-for-dev; do
+            gh issue edit "$NUM" --remove-label "$l" 2>/dev/null || true
+          done
+      - name: Trae el plugin fabrica
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.fabrica_repo }}
+          ref: ${{ inputs.fabrica_ref }}
+          path: .fabrica-plugin
+          token: ${{ secrets.FABRICA_PLUGIN_TOKEN || github.token }}
+          persist-credentials: false
+      - name: Quita blocked-by-N de los dependientes
+        run: bash .fabrica-plugin/plugins/fabrica/scripts/clear-blockers.sh "$NUM"
+
+  epic-status:
+    if: github.event_name == 'issues'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      NUM: ${{ github.event.issue.number }}
+    steps:
+      - name: Trae el plugin fabrica
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.fabrica_repo }}
+          ref: ${{ inputs.fabrica_ref }}
+          path: .fabrica-plugin
+          token: ${{ secrets.FABRICA_PLUGIN_TOKEN || github.token }}
+          persist-credentials: false
+      - name: Sincroniza el estado de la épica padre
+        run: bash .fabrica-plugin/plugins/fabrica/scripts/sync-epic-status.sh "$NUM"
+
+  reconcile-epics:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Trae el plugin fabrica
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.fabrica_repo }}
+          ref: ${{ inputs.fabrica_ref }}
+          path: .fabrica-plugin
+          token: ${{ secrets.FABRICA_PLUGIN_TOKEN || github.token }}
+          persist-credentials: false
+      - name: Reconcilia cada épica con sus sub-issues
+        run: bash .fabrica-plugin/plugins/fabrica/scripts/reconcile-all-epics.sh

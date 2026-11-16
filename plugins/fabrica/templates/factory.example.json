@@ -1,0 +1,34 @@
+{
+  "stack": "node-ts",
+  "commands": {
+    "install": ["npm", "ci"],
+    "lint": ["npx", "eslint", ".", "--max-warnings", "0"],
+    "typecheck": ["npx", "tsc", "--noEmit"],
+    "test": ["npm", "test"],
+    "build": ["npm", "run", "build"],
+    "e2e": ["npx", "playwright", "test"],
+    "dev": ["npm", "run", "dev"]
+  },
+  "appUrl": null,
+  "factoryEpic": null,
+  "docLang": "es",
+  "format": [
+    {
+      "extensions": ["ts", "tsx", "js", "jsx", "json", "css", "md"],
+      "cmd": ["npx", "prettier", "--write"]
+    },
+    {
+      "extensions": ["ts", "tsx", "js", "jsx"],
+      "cmd": ["npx", "eslint", "--fix"]
+    }
+  ],
+  "models": {
+    "worker": "sonnet",
+    "codeReviewer": "sonnet",
+    "uiReviewer": "sonnet",
+    "planning": "opus"
+  },
+  "review": {
+    "uiReview": "label"
+  }
+}

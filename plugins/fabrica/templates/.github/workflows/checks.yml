@@ -1,0 +1,25 @@
+# Llama al workflow de checks del plugin fabrica, en la versión de este
+# proyecto. Lo escribe fabrica-setup: se actualiza con `fabrica-setup refresh`.
+name: checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    uses: __FABRICA_REPO__/.github/workflows/checks.yml@__FABRICA_REF__
+    with:
+      fabrica_repo: __FABRICA_REPO__
+      fabrica_ref: __FABRICA_REF__
+    secrets:
+      FABRICA_PLUGIN_TOKEN: ${{ secrets.FABRICA_PLUGIN_TOKEN }}

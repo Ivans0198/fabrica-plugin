@@ -1,0 +1,11 @@
+{
+  "name": "fabrica-local",
+  "owner": { "name": "Ivan Gutierrez" },
+  "plugins": [
+    {
+      "name": "fabrica",
+      "source": "./plugins/fabrica",
+      "description": "La fábrica: cola de issues, Stop gate, revisores y workers para Claude Code."
+    }
+  ]
+}

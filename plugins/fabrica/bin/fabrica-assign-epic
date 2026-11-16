@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Asigna los sub-issues abiertos de una épica. Uso: fabrica-assign-epic <épica> <usuario>
+exec bash "$(dirname "$(readlink -f "$0")")/../scripts/assign-epic.sh" "$@"

@@ -1,0 +1,91 @@
+# Reusable workflow: los checks básicos (tests, lint, tipos, build) de un
+# proyecto de la fábrica, visibles en el PR.
+#
+# El Stop gate ya los corre en la máquina del worker. Eso no cubre un PR
+# abierto a mano, uno que venga de un fork, ni un commit empujado después de
+# que el gate pasó. Este workflow los corre igual que el gate: con los
+# comandos de factory.json (commands.*), por medio de fabrica-cmd. Un comando
+# en null pasa diciendo que no se corrió.
+#
+# Solo instala Node. Un stack con otra toolchain todavía no tiene su paso de
+# setup aquí: se agrega cuando un proyecto real lo pida.
+#
+# No puede impedir el merge si el repo no admite branch protection. Hace
+# ruidoso el fallo, no lo bloquea.
+#
+# Lo llama .github/workflows/checks.yml de cada proyecto, que escribe
+# fabrica-setup con el repo y la versión del plugin.
+name: checks
+
+on:
+  workflow_call:
+    inputs:
+      fabrica_repo:
+        description: "Repo del plugin (dueño/nombre)"
+        required: true
+        type: string
+      fabrica_ref:
+        description: "Tag del plugin, el mismo del uses: que llama a este workflow"
+        required: true
+        type: string
+    secrets:
+      FABRICA_PLUGIN_TOKEN:
+        description: "Solo si el repo del plugin es privado: un token que pueda leerlo"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trae el plugin fabrica
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.fabrica_repo }}
+          ref: ${{ inputs.fabrica_ref }}
+          path: .fabrica-plugin
+          token: ${{ secrets.FABRICA_PLUGIN_TOKEN || github.token }}
+          persist-credentials: false
+      # Fuera del árbol del proyecto, para que el lint y los tests del
+      # proyecto no recorran el plugin.
+      - name: Saca el plugin del proyecto y pone sus comandos en el PATH
+        run: |
+          mv .fabrica-plugin "$RUNNER_TEMP/fabrica-plugin"
+          echo "$RUNNER_TEMP/fabrica-plugin/plugins/fabrica/bin" >> "$GITHUB_PATH"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Sin factory.json el proyecto todavía no pasó por el bootstrap: los
+      # pasos de la app fallarían por no existir, no por trabajo mal hecho.
+      # Es la misma condición que desarma el Stop gate. No pasa callado: un
+      # verde sin haber corrido nada se confunde con un verde de verdad.
+      - id: repo
+        name: Averigua qué comandos están configurados
+        run: |
+          if [ -f factory.json ]; then
+            echo "bootstrapped=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning title=Checks sin correr::el proyecto no tiene factory.json, así que no se corrió ningún check. Corre fabrica-setup init y commitea factory.json."
+            echo "bootstrapped=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Dependencias del proyecto
+        if: steps.repo.outputs.bootstrapped == 'true'
+        run: fabrica-cmd install
+      - name: Instala el navegador que necesitan los tests de captura de UI
+        if: steps.repo.outputs.bootstrapped == 'true' && hashFiles('playwright.config.*') != ''
+        run: npx playwright install --with-deps chromium
+      - name: Tests
+        if: steps.repo.outputs.bootstrapped == 'true'
+        run: fabrica-cmd test
+      - name: Lint
+        if: steps.repo.outputs.bootstrapped == 'true'
+        run: fabrica-cmd lint
+      - name: Tipos
+        if: steps.repo.outputs.bootstrapped == 'true'
+        run: fabrica-cmd typecheck
+      - name: Build
+        if: steps.repo.outputs.bootstrapped == 'true'
+        run: fabrica-cmd build

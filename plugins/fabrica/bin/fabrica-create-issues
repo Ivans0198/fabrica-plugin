@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Crea las issues aprobadas de una feature. Uso: fabrica-create-issues <json> --approved <sha256>
+exec bash "$(dirname "$(readlink -f "$0")")/../scripts/create-issues.sh" "$@"

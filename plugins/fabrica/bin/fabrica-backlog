@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Procesa la cola de issues con workers. Uso: fabrica-backlog (variables: MAX_ISSUES, ONLY_LABEL, ...)
+exec bash "$(dirname "$(readlink -f "$0")")/../scripts/process-backlog.sh" "$@"

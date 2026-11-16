@@ -1,0 +1,122 @@
+# Reusable workflow: mencionar @claude en un issue o comentario hace que Claude
+# responda desde un runner de GitHub. Sirve para preguntas, tickets sueltos o
+# arreglos chicos. La planeación con Spec Kit (spec, plan, tareas, issues) no:
+# necesita una sesión interactiva.
+#
+# Credencial: token personal del actor (CLAUDE_TOKEN_<USUARIO>) o API key de
+# equipo, de los secretos que el proyecto pasa con `secrets: inherit`. La bolsa
+# del cron (CLAUDE_CODE_OAUTH_TOKEN) no se usa aquí.
+# Solo OWNER, MEMBER o COLLABORATOR pueden invocarlo.
+name: claude-mentions
+
+on:
+  workflow_call:
+    inputs:
+      fabrica_repo:
+        required: true
+        type: string
+      fabrica_ref:
+        required: true
+        type: string
+
+jobs:
+  claude:
+    # Sin este filtro, en un repo público cualquiera abriría un issue con
+    # "@claude" y obtendría ejecución con escritura en el repo y gasto de
+    # credenciales.
+    if: |
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+               github.event.comment.author_association || github.event.issue.author_association) &&
+      (
+        (github.event_name == 'issues' && contains(github.event.issue.body, '@claude')) ||
+        (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+        (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+      )
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    concurrency:
+      group: claude-mentions-${{ github.event.issue.number || github.run_id }}
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Trae el plugin fabrica
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.fabrica_repo }}
+          ref: ${{ inputs.fabrica_ref }}
+          path: .fabrica-plugin
+          token: ${{ secrets.FABRICA_PLUGIN_TOKEN || github.token }}
+          persist-credentials: false
+
+      - name: Saca el plugin del proyecto y pone sus comandos en el PATH
+        run: |
+          mv .fabrica-plugin "$RUNNER_TEMP/fabrica-plugin"
+          echo "FABRICA=$RUNNER_TEMP/fabrica-plugin/plugins/fabrica" >> "$GITHUB_ENV"
+          echo "$RUNNER_TEMP/fabrica-plugin/plugins/fabrica/bin" >> "$GITHUB_PATH"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Dependencias del proyecto
+        if: hashFiles('factory.json') != ''
+        run: fabrica-cmd install
+
+      # El mismo lector que process-backlog.sh: valida el nombre, así que un
+      # valor con espacios o saltos de línea no puede agregar argumentos.
+      - name: Lee el modelo del worker de factory.json
+        run: |
+          source "$FABRICA/scripts/lib/factory-config.sh"
+          echo "FACTORY_MODEL=$(factory_read_model worker sonnet)" >> "$GITHUB_ENV"
+
+      - name: Resolver credencial del actor
+        id: cred
+        shell: bash
+        env:
+          # Todos los secretos que el proyecto pasó con `secrets: inherit`.
+          # Este paso solo saca de ahí el que corresponde; no corre código de
+          # terceros.
+          SECRETS_JSON: ${{ toJSON(secrets) }}
+          GH_TOKEN: ${{ github.token }}
+          NUM: ${{ github.event.issue.number || github.event.pull_request.number }}
+        run: |
+          pick() { jq -r --arg k "$1" '.[$k] // empty' <<< "$SECRETS_JSON"; }
+          DEFAULT_API=$(pick ANTHROPIC_API_KEY)
+          A="${GITHUB_ACTOR^^}"; A="${A//[^A-Z0-9]/_}"; KEY="CLAUDE_TOKEN_$A"
+          TOKEN=$(pick "$KEY")
+          if [ -n "$TOKEN" ]; then
+            echo "🔑 Credencial: $KEY (token personal de $GITHUB_ACTOR)"
+            { echo "oauth=$TOKEN"; echo "api="; } >> "$GITHUB_OUTPUT"
+          elif [ -n "$DEFAULT_API" ]; then
+            echo "🔑 Credencial: ANTHROPIC_API_KEY (API key de equipo)"
+            { echo "oauth="; echo "api=$DEFAULT_API"; } >> "$GITHUB_OUTPUT"
+          else
+            echo "::error title=Sin credencial::$GITHUB_ACTOR no tiene token ($KEY) y el repo no tiene API key de equipo"
+            if [ -n "${NUM:-}" ]; then
+              BODY=$(printf '🔑 @%s: no encontré credencial tuya para correr la fábrica en la nube, y este repo no tiene API key de equipo.\n\nPlanta tu token personal:\n```\nclaude setup-token\ngh secret set %s --repo %s\n```\n\nLuego repite la mención.' "$GITHUB_ACTOR" "$KEY" "$GITHUB_REPOSITORY")
+              gh issue comment "$NUM" --repo "$GITHUB_REPOSITORY" --body "$BODY" || true
+            fi
+            exit 1
+          fi
+
+      - name: Run Claude on the mention
+        uses: anthropics/claude-code-action@v1
+        env:
+          # Esta corrida responde en el hilo y no produce código: el Stop gate
+          # no tiene nada que verificar.
+          FACTORY_GATE: "off"
+        with:
+          claude_code_oauth_token: ${{ steps.cred.outputs.oauth }}
+          anthropic_api_key: ${{ steps.cred.outputs.api }}
+          plugin_marketplaces: ${{ runner.temp }}/fabrica-plugin
+          plugins: fabrica@fabrica-local
+          claude_args: "--max-turns 50 --model ${{ env.FACTORY_MODEL }}"
+          # Sin prompt: la Action lee la mención y responde en el hilo.

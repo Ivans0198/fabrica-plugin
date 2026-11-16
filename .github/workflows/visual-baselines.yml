@@ -1,0 +1,173 @@
+# Reusable workflow: la línea base visual vinculante es la de Linux, y solo se
+# acepta a mano. Lo llama el proyecto cuando tiene módulo visual.
+#
+# En cada PR este workflow COMPARA y nada más. No regenera, no commitea y no
+# empuja. Si el job pudiera arreglar el desajuste por su cuenta, el commit que
+# de verdad se mergea nunca quedaría validado: el push del bot dispararía otra
+# corrida que habría que saltar para no entrar en bucle, y el rojo terminaría
+# colgando de un commit ya superado. Sin push no hay bucle ni validación que
+# saltarse: el check cae sobre el HEAD real del PR.
+#
+# Cuando la diferencia es intencionada, una persona acepta la línea base nueva
+# lanzando el workflow del proyecto a mano sobre la rama del PR:
+#   gh workflow run visual-baselines.yml --ref <rama-de-PR> \
+#     -f reviewed_run_url=<url de la corrida fallida>
+# Se pide esa URL a propósito: aceptar sin abrir el artefacto `visual-diff` es
+# dar por bueno cualquier píxel, que es lo que la regresión visual existe para
+# impedir. La URL queda en el resumen del run.
+#
+# Normalmente `--ref` es una rama de PR. La excepción es un `main` que ya quedó
+# desajustado (el incidente que abre report-visual-incident.sh): ahí `--ref
+# main` es lo correcto.
+#
+# El push del job `accept` deja la corrida de `compare` que dispara en
+# `action_required`, porque la empuja `github-actions[bot]`. Hasta que alguien
+# la apruebe, el check no está verde: está sin arrancar.
+#
+# El disparo en `push` a `main` existe porque nada impide mergear con este
+# check en rojo si el repo no admite branch protection. Si `main` queda
+# incoherente, `report-incident` abre un issue en la cola en vez de dejar una
+# corrida roja que nadie mira.
+name: Visual baselines (Linux)
+
+on:
+  workflow_call:
+    inputs:
+      fabrica_repo:
+        required: true
+        type: string
+      fabrica_ref:
+        required: true
+        type: string
+      reviewed_run_url:
+        description: "URL de la corrida cuyo artefacto visual-diff ya miraste (solo al aceptar)"
+        required: false
+        type: string
+        default: ""
+    secrets:
+      FABRICA_PLUGIN_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  compare:
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Compara contra la línea base vinculante
+        run: npx playwright test
+      - name: Guarda el diff para que alguien lo mire
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: visual-diff
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  report-incident:
+    needs: compare
+    # `always()` es obligatorio: sin una función de estado explícita, Actions
+    # exige que `compare` haya terminado en success(), y este job nunca
+    # correría cuando compare falla.
+    if: always() && github.event_name == 'push' && needs.compare.result == 'failure'
+    runs-on: ubuntu-latest
+    permissions:
+      # El checkout del proyecto (lee factory.json → factoryEpic) necesita
+      # contents: read en un repo privado.
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trae el plugin fabrica
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.fabrica_repo }}
+          ref: ${{ inputs.fabrica_ref }}
+          path: .fabrica-plugin
+          token: ${{ secrets.FABRICA_PLUGIN_TOKEN || github.token }}
+          persist-credentials: false
+      - name: Abre (o no duplica) el incidente de main desajustado
+        run: bash .fabrica-plugin/plugins/fabrica/scripts/report-visual-incident.sh
+
+  accept:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Exige la corrida revisada
+        env:
+          REVIEWED_RUN_URL: ${{ inputs.reviewed_run_url }}
+        run: |
+          if [ -z "$REVIEWED_RUN_URL" ]; then
+            echo "::error::Falta reviewed_run_url: la URL de la corrida cuyo visual-diff miraste." >&2
+            exit 1
+          fi
+          {
+            echo "Línea base aceptada tras revisar:"
+            echo "$REVIEWED_RUN_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+      - name: Trae el plugin fabrica
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.fabrica_repo }}
+          ref: ${{ inputs.fabrica_ref }}
+          path: .fabrica-plugin
+          token: ${{ secrets.FABRICA_PLUGIN_TOKEN || github.token }}
+          persist-credentials: false
+      - name: Saca el plugin del proyecto
+        run: |
+          mv .fabrica-plugin "$RUNNER_TEMP/fabrica-plugin"
+          echo "FABRICA=$RUNNER_TEMP/fabrica-plugin/plugins/fabrica" >> "$GITHUB_ENV"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Regenera la línea base
+        id: update
+        run: bash "$FABRICA/scripts/update-visual-baselines.sh"
+        continue-on-error: true
+      - name: Commitea la línea base aceptada
+        id: commit
+        if: steps.update.outcome == 'failure'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git diff --cached --quiet; then
+            echo "El fallo no era de píxeles: no hay línea base que aceptar." >&2
+            exit 1
+          fi
+          git commit -m "Línea base visual para Linux (aceptada a mano)"
+          git push
+      - name: Avisa en el PR de que falta confirmar el check
+        if: steps.commit.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          branch="${GITHUB_REF#refs/heads/}"
+          pr_number=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
+          if [ -n "$pr_number" ]; then
+            gh pr comment "$pr_number" --body "✅ Línea base visual aceptada y empujada a esta rama. **Todavía no mergees**: espera a que \`compare\` corra sobre este commit y salga verde. Si aparece como \`action_required\`, apruébala primero, porque la empujó un bot y GitHub no la arranca sola. Mergear antes deja \`main\` con el código nuevo y la captura vieja."
+          else
+            echo "No encontré un PR abierto para la rama $branch; nadie a quien avisar." >&2
+          fi
