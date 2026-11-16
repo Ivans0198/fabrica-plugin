@@ -63,10 +63,17 @@ case "${1:-}" in
       exit "$rc"
     fi
     mark_in_progress "$n"
-    ensure_worker_worktree "$n" >&2
-    copy_env_files "$n"
-    reset_gate_state "$n"
-    echo "$ROOT/$(worktree_dir_for "$n")"
+    if [ "${GITHUB_ACTIONS:-}" = true ]; then
+      # El runner es desechable y no tiene EnterWorktree: rama en el lugar.
+      ensure_branch_in_place "$n" >&2
+      rm -f .factory/state/stop-gate-count .factory/gate-gave-up
+      echo "$ROOT"
+    else
+      ensure_worker_worktree "$n" >&2
+      copy_env_files "$n"
+      reset_gate_state "$n"
+      echo "$ROOT/$(worktree_dir_for "$n")"
+    fi
     ;;
   release)
     n=$(issue_number "${2:-}")

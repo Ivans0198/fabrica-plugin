@@ -286,3 +286,27 @@ release_to_queue() {  # issue number
   [ -n "${ME:-}" ] && gh issue edit "$1" --remove-assignee "@me" 2>/dev/null || true
   bash "$SCRIPT_DIR/task-status.sh" "$1" "Todo" 2>/dev/null || true
 }
+
+# En un checkout desechable (el runner de GitHub Actions) la issue se trabaja
+# en la rama impl-N del mismo checkout, sin worktree: allá no hay
+# EnterWorktree y nadie más usa esa copia. Retoma la rama si ya existe, local o
+# en origin; si no, la crea desde origin/<base> sin seguirla, igual que
+# ensure_worker_worktree.
+ensure_branch_in_place() {  # issue number
+  local branch="impl-$1" base
+  if git show-ref --verify --quiet "refs/heads/$branch"; then
+    git checkout -q "$branch"
+    return
+  fi
+  if git fetch -q origin "$branch" 2>/dev/null; then
+    git checkout -q -b "$branch" "origin/$branch"
+    return
+  fi
+  base=$(base_branch)
+  git fetch -q origin "$base" 2>/dev/null || true
+  if git rev-parse --verify -q "origin/$base" > /dev/null; then
+    git checkout -q --no-track -b "$branch" "origin/$base"
+  else
+    git checkout -q -b "$branch"
+  fi
+}

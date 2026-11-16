@@ -160,7 +160,8 @@ Execute these steps IN ORDER:
    prints the worktree path: work inside it (in an interactive session, enter
    it with `EnterWorktree` and that path). If you are already on `impl-N` (a
    worker launched in its worktree, or a claim that already ran), keep working
-   there and never create a second branch. Where `fabrica-claim` is not
+   there and never create a second branch. In a GitHub Actions run there is no worktree: `fabrica-claim` checks out
+   `impl-N` in the same checkout and prints the repo root. Where `fabrica-claim` is not
    available, do the same by hand: `gh issue edit N --add-label "in-progress"
 --remove-label "pending"`, branch `impl-N`, and
    `fabrica-task-status N "In Progress"`.

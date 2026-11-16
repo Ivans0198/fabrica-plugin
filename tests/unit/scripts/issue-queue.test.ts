@@ -120,13 +120,14 @@ describe("comandos de la cola", () => {
       "git init -q -b main && git config user.email t@t.com && git config user.name t && git add -A && git commit -q -m inicial",
     );
     const binDir = await installFakeGh(dir);
-    return {
-      repo,
-      env: {
-        ...process.env,
-        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
-      },
+    const env: NodeJS.ProcessEnv = {
+      ...process.env,
+      PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
     };
+    // El CI del plugin corre en GitHub Actions: sin esto, fabrica-claim
+    // tomaría el camino de la nube en todos los tests.
+    delete env.GITHUB_ACTIONS;
+    return { repo, env };
   }
 
   const calls = () => readFile(path.join(dir, "gh-calls.log"), "utf8");
@@ -256,6 +257,30 @@ describe("comandos de la cola", () => {
       expect(stdout.trim().split("\n").pop()).toBe(
         path.join(repo, ".claude/worktrees/impl-6"),
       );
+    },
+    TIMEOUT,
+  );
+
+  // En la nube no hay EnterWorktree (está en las herramientas prohibidas) y
+  // el runner es desechable: un worktree dejaría al agente trabajando en la
+  // copia equivocada (probado en fabrica-prueba, 2026-11-16).
+  it(
+    "fabrica-claim en GitHub Actions trabaja en la rama impl-N del mismo checkout, sin worktree",
+    async () => {
+      const { repo, env } = await project();
+
+      const { code, stdout } = await run(["claim", "5"], repo, {
+        ...env,
+        GITHUB_ACTIONS: "true",
+      });
+
+      expect(code).toBe(0);
+      expect(stdout.trim().split("\n").pop()).toBe(repo);
+      expect(existsSync(path.join(repo, ".claude/worktrees/impl-5"))).toBe(
+        false,
+      );
+      const branch = await git(repo, "git branch --show-current");
+      expect(branch.stdout.trim()).toBe("impl-5");
     },
     TIMEOUT,
   );
