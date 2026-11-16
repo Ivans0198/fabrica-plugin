@@ -88,7 +88,13 @@ case "$1 $2" in
       *assignees*) echo "\${FAKE_OTHERS:-0}" ;;
       *state*) var="FAKE_STATE_$n"; echo "\${!var:-OPEN}" ;;
     esac ;;
-  "pr list") echo "\${FAKE_PR_COUNT:-0}" ;;
+  "pr list")
+    # La búsqueda de GitHub tarda en ver un PR recién abierto: con
+    # FAKE_SEARCH_LAG, --search todavía no lo encuentra y la lista sí.
+    case "$*" in
+      *--search*) if [ -n "\${FAKE_SEARCH_LAG:-}" ]; then echo 0; else echo "\${FAKE_PR_COUNT:-0}"; fi ;;
+      *) echo "\${FAKE_PR_COUNT:-0}" ;;
+    esac ;;
 esac
 exit 0
 `,
@@ -452,6 +458,26 @@ describe("comandos de la cola", () => {
       TIMEOUT,
     );
   });
+
+  // En la nube, fabrica-check-done corrido segundos después de abrir el PR
+  // no lo encontró: la búsqueda de GitHub todavía no lo indexaba (#7,
+  // 2026-11-16). El paso de seguridad del workflow la habría marcado
+  // needs-human con su PR abierto.
+  it(
+    "fabrica-check-done encuentra un PR recién abierto aunque la búsqueda de GitHub no lo vea todavía",
+    async () => {
+      const { repo, env } = await project();
+
+      const { code } = await run(["done", "5"], repo, {
+        ...env,
+        FAKE_PR_COUNT: "1",
+        FAKE_SEARCH_LAG: "1",
+      });
+
+      expect(code).toBe(0);
+    },
+    TIMEOUT,
+  );
 
   it(
     "rechaza un número de issue que no es un número",

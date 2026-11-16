@@ -187,7 +187,11 @@ flag_needs_human() {  # issue number, comment body
 # PR.
 pr_declares_closes() {  # issue number
   local n="$1" count
-  if ! count=$(gh pr list --state all --search "Closes #$n in:body" --json number --jq length 2>/dev/null); then
+  # La lista de PRs, no la búsqueda: el índice de búsqueda de GitHub tarda
+  # unos segundos en ver un PR recién abierto, y justo ahí se pregunta. Los
+  # 100 más recientes alcanzan: el PR que importa es el que se acaba de abrir.
+  if ! count=$(gh pr list --state all --limit 100 --json body \
+      --jq "[.[] | select((.body // \"\") | test(\"(?i)\\\\b(close[sd]?|fix(e[sd])?|resolve[sd]?) #$n\\\\b\"))] | length" 2>/dev/null); then
     echo "⚠ no pude comprobar si #$n ya tiene PR (falla de gh); no lo marco needs-human por si acaso" >&2
     return 0
   fi
