@@ -44,6 +44,9 @@ ONLY_LABEL="${ONLY_LABEL:-}"   # opcional: partir el backlog por carril (ej. ONL
 ONLY_MINE="${ONLY_MINE:-}"     # opcional: ONLY_MINE=1 → SOLO tickets asignados a mí (ignora el pozo común)
 ME=$(gh api user --jq .login 2>/dev/null || echo "")
 PROCESSED=0
+# PID del worker que lanzó run_worker. Nunca se hereda: Claude Code exporta
+# CLAUDE_PID con su propio PID, y cleanup() mata este.
+WORKER_PID=""
 
 echo "🏭 Worker model: $WORKER_MODEL (configurable en factory.json → models.worker)"
 [ -n "$ONLY_LABEL" ] && echo "🔀 Carril: solo issues con label '$ONLY_LABEL'"
@@ -205,7 +208,7 @@ next_issue() {  # -> first eligible pending issue number, or empty
 
 # Leave no ghost state if the operator hits Ctrl+C mid-ticket.
 cleanup() {
-  [ -n "${CLAUDE_PID:-}" ] && kill "$CLAUDE_PID" 2>/dev/null || true
+  [ -n "${WORKER_PID:-}" ] && kill "$WORKER_PID" 2>/dev/null || true
   if [ -n "${N:-}" ]; then
     echo "" >&2
     echo "⏹ Interrumpido en #$N: devolviéndolo a la cola" >&2
@@ -420,7 +423,7 @@ y después, en Claude, \`/fabrica:backlog\`. El nuevo worker puede continuar des
   fi
 }
 
-# Launches the worker for issue $1 in the background and sets CLAUDE_PID.
+# Launches the worker for issue $1 in the background and sets WORKER_PID.
 # Pulled out of main() so tests can drive it directly against a fake `claude`.
 run_worker() {
   local n="$1" wt_dir
@@ -428,7 +431,7 @@ run_worker() {
   ensure_worker_worktree "$n"
   # Runs from inside the worktree instead of passing `--worktree` to claude,
   # so the branch name stays the one `ensure_worker_worktree` decided. `exec`
-  # keeps $CLAUDE_PID pointing at the actual claude process, not the subshell.
+  # keeps $WORKER_PID pointing at the actual claude process, not the subshell.
   (
     cd "$wt_dir"
     exec claude -p "Process GitHub issue #$n following the issue lifecycle in CLAUDE.md:
@@ -446,7 +449,7 @@ run_worker() {
       --model "$WORKER_MODEL" \
       --disallowedTools "$WORKER_DISALLOWED_TOOLS"
   ) &
-  CLAUDE_PID=$!
+  WORKER_PID=$!
 }
 
 main() {
@@ -495,9 +498,9 @@ main() {
     LAST_COMMIT=""
     LAST_ERR=0
     WT_DIR=$(worktree_dir_for "$N")
-    while kill -0 "$CLAUDE_PID" 2>/dev/null; do
+    while kill -0 "$WORKER_PID" 2>/dev/null; do
       sleep 60
-      kill -0 "$CLAUDE_PID" 2>/dev/null || break
+      kill -0 "$WORKER_PID" 2>/dev/null || break
       ELAPSED_MIN=$(( ($(date +%s) - START_TS) / 60 ))
       if [ -d "$WT_DIR" ]; then
         # Untracked files never travel to worktrees, so hand the worker every
@@ -556,7 +559,7 @@ main() {
 
     # `set -e` would otherwise abort the whole script on a non-zero wait, so
     # the exit status is captured through the if/else instead of `!`.
-    if wait "$CLAUDE_PID"; then
+    if wait "$WORKER_PID"; then
       WORKER_EXIT_CODE=0
     else
       WORKER_EXIT_CODE=$?
