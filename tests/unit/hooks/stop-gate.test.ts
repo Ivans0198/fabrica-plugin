@@ -66,13 +66,20 @@ interface RunResult {
   stderr: string;
 }
 
-function runStopGate(cwd: string, env: NodeJS.ProcessEnv): Promise<RunResult> {
+function runStopGate(
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+  hookInput?: object,
+): Promise<RunResult> {
   return new Promise((resolve, reject) => {
     const child = spawn("bash", [STOP_GATE_SCRIPT], {
       cwd,
       env,
-      stdio: ["ignore", "ignore", "pipe"],
+      stdio: [hookInput ? "pipe" : "ignore", "ignore", "pipe"],
     });
+    if (hookInput) {
+      child.stdin!.end(JSON.stringify(hookInput));
+    }
     let stderr = "";
     child.stderr.on("data", (chunk: Buffer) => {
       stderr += chunk.toString();
@@ -195,6 +202,61 @@ describe("stop gate", () => {
       const { code } = await runStopGate(subdir, env);
 
       expect(code).toBe(2);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // EnterWorktree muda la sesión a .claude/worktrees/impl-N, pero
+  // CLAUDE_PROJECT_DIR sigue en la raíz: solo el cwd de la entrada del hook
+  // dice dónde está el trabajo (probado en fabrica-prueba, 2026-11-16).
+  it(
+    "verifica el worktree en el que trabaja la sesión aunque CLAUDE_PROJECT_DIR sea la raíz",
+    async () => {
+      workDir = await mkdtemp(path.join(tmpdir(), "seadragons-stop-gate-"));
+      const root = path.join(workDir, "root");
+      const worktree = path.join(root, ".claude/worktrees/impl-1");
+      await mkdir(worktree, { recursive: true });
+      spawnSync("git", ["init", "-q", root]);
+      spawnSync("git", ["init", "-q", worktree]);
+      await writeFile(
+        path.join(worktree, "factory.json"),
+        factoryJson({ lint: ["npx", "eslint", "."] }),
+      );
+      const binDir = await installFakeEslintRunner(workDir, true);
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        CLAUDE_PROJECT_DIR: root,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      };
+      delete env.FACTORY_GATE;
+
+      const { code } = await runStopGate(root, env, { cwd: worktree });
+
+      expect(code).toBe(2);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "ignora un cwd que queda fuera del proyecto",
+    async () => {
+      const binDir = await prepareFailingLint();
+      const elsewhere = await mkdtemp(path.join(tmpdir(), "seadragons-otro-"));
+      spawnSync("git", ["init", "-q", elsewhere]);
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        CLAUDE_PROJECT_DIR: workDir,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      };
+      delete env.FACTORY_GATE;
+
+      try {
+        const { code } = await runStopGate(workDir, env, { cwd: elsewhere });
+
+        expect(code).toBe(2);
+      } finally {
+        await rm(elsewhere, REMOVE_TEMP_DIR_OPTIONS);
+      }
     },
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );

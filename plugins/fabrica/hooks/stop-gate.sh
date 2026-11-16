@@ -22,10 +22,23 @@ if [ "${FACTORY_GATE:-}" = "off" ]; then
   exit 0
 fi
 
-# Todo lo de abajo es relativo a la raíz del proyecto (factory.json,
-# .factory/). La sesión puede haber quedado en una subcarpeta.
-if [ -n "${CLAUDE_PROJECT_DIR:-}" ]; then
-  cd "$CLAUDE_PROJECT_DIR" || { echo "❌ Stop gate: no pude entrar a $CLAUDE_PROJECT_DIR" >&2; exit 2; }
+# Todo lo de abajo es relativo a la raíz del checkout donde está el trabajo
+# (factory.json, .factory/). La sesión puede haber quedado en una subcarpeta,
+# o en un worktree .claude/worktrees/impl-N al que entró con EnterWorktree:
+# ahí CLAUDE_PROJECT_DIR sigue en la raíz, y solo el cwd de la entrada del
+# hook dice dónde está. Ese cwd vale solo si queda dentro del proyecto.
+ROOT="${CLAUDE_PROJECT_DIR:-}"
+if [ ! -t 0 ] && command -v jq >/dev/null 2>&1; then
+  hook_cwd=$(jq -r '.cwd // empty' 2>/dev/null || true)
+  if [ -n "$hook_cwd" ] && [ -d "$hook_cwd" ]; then
+    hook_top=$(git -C "$hook_cwd" rev-parse --show-toplevel 2>/dev/null || true)
+    case "$hook_top/" in
+      "${ROOT:-$hook_top}"/*) ROOT="$hook_top" ;;
+    esac
+  fi
+fi
+if [ -n "$ROOT" ]; then
+  cd "$ROOT" || { echo "❌ Stop gate: no pude entrar a $ROOT" >&2; exit 2; }
 fi
 
 # Anti-infinite-loop guard: after MAX_GATE_RUNS blocked attempts, let Claude
