@@ -144,7 +144,9 @@ Execute these steps IN ORDER:
 
 1. **Pick** the next `pending` issue that is not blocked (lowest number first,
    respecting `priority:high` > `priority:medium` > `priority:low`).
-   `fabrica-next-issue` prints it, applying exactly this rule.
+   Skip issues assigned to someone else: an assignee is a human's claim,
+   and the nightly run respects it too. `fabrica-next-issue` prints the
+   issue, applying exactly this rule.
 
 2. **Already-done check (idempotency), BEFORE writing any code.** Verify the
    issue isn't already implemented: if every acceptance criterion is met by
@@ -166,8 +168,11 @@ Execute these steps IN ORDER:
 --remove-label "pending"`, branch `impl-N`, and
    `fabrica-task-status N "In Progress"`.
 
-4. **TDD** until green (Definition of Done items 1–3). Before opening the PR,
-   sync with main: `git fetch origin && git rebase origin/main`.
+4. **TDD** until green (Definition of Done items 1–3). Commit as you go:
+   every time a piece is green (tests passing, lint and types clean), commit
+   it before starting the next one. The turn budget can run out without
+   warning, and uncommitted work is lost work. Before opening the PR, sync
+   with main: `git fetch origin && git rebase origin/main`.
 
 5. **Review**: launch `fabrica:code-reviewer` (and `fabrica:ui-reviewer` ONLY when the UI-review
    policy in `factory.json` → `review.uiReview` applies; see Definition of

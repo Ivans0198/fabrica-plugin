@@ -201,6 +201,10 @@ async function setupWorkDir(): Promise<string> {
     path.join(workDir, "scripts/task-status.sh"),
   );
   await copyFile(
+    pluginFile("scripts/worker-prompt.sh"),
+    path.join(workDir, "scripts/worker-prompt.sh"),
+  );
+  await copyFile(
     WORKER_DISALLOWED_TOOLS_FILE,
     path.join(workDir, "scripts/worker-disallowed-tools.txt"),
   );

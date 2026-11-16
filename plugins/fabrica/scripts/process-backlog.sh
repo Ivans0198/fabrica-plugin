@@ -229,16 +229,7 @@ run_worker() {
     # revisor, termina su turno esperando la notificación y `claude -p` se
     # cierra sin la respuesta (probado el 2026-11-16).
     export CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
-    exec claude -p "Process GitHub issue #$n following the issue lifecycle in CLAUDE.md:
-  read the issue with 'gh issue view $n', label it in-progress, work on branch impl-$n,
-  TDD until the Definition of Done is met, run fabrica:code-reviewer (and fabrica:ui-reviewer
-  only when the UI-review policy in factory.json applies to this issue) as step 5 of
-  CLAUDE.md describes, until APPROVED, then open a draft PR with 'Closes #$n'.
-  A reviewer that leaves PENDING FOR HUMAN after round 3 is a blocker: label needs-human.
-  Commit as you go: every time a piece is green (tests passing, lint and types clean),
-  commit it before starting the next one. Your turn budget can run out without warning,
-  and uncommitted work is lost work.
-  If blocked after the max attempts, add label needs-human with an explanatory comment and stop." \
+    exec claude -p "$(bash "$SCRIPT_DIR/worker-prompt.sh" one "$n")" \
       --permission-mode "$PERMISSION_MODE" \
       --max-turns "$MAX_TURNS" \
       --model "$WORKER_MODEL" \

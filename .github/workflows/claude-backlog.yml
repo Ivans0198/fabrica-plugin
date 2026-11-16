@@ -129,6 +129,25 @@ jobs:
             exit 1
           fi
 
+      # El prompt solo despacha: el ciclo está en las reglas del proyecto, y el
+      # texto sale del mismo generador que usan los workers locales.
+      - name: Arma el prompt del worker
+        id: prompt
+        env:
+          EVENT: ${{ github.event_name }}
+          NUM: ${{ github.event.issue.number }}
+        run: |
+          if [ "$EVENT" = issues ]; then
+            text=$(fabrica-worker-prompt one "$NUM")
+          else
+            text=$(fabrica-worker-prompt batch 5)
+          fi
+          {
+            echo "text<<FABRICA_PROMPT_EOF"
+            echo "$text"
+            echo "FABRICA_PROMPT_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Run Claude Code on the issue / backlog
         id: claude
         uses: anthropics/claude-code-action@v1
@@ -147,10 +166,7 @@ jobs:
           # de arriba: con la URL Git la nube instalaría siempre la última.
           plugin_marketplaces: ${{ runner.temp }}/fabrica-plugin
           plugins: fabrica@fabrica-local
-          prompt: |
-            ${{ github.event_name == 'issues'
-              && format('Process GitHub issue #{0} following the issue lifecycle in CLAUDE.md: label in-progress, branch impl-{0}, TDD until the Definition of Done passes, fabrica:code-reviewer (and fabrica:ui-reviewer ONLY when the UI-review policy in factory.json applies to this issue) as step 5 of the lifecycle describes, until APPROVED, then draft PR with "Closes #{0}". If blocked, or a reviewer leaves PENDING FOR HUMAN after round 3, label needs-human with an explanatory comment.', github.event.issue.number)
-              || 'Process up to 5 eligible pending issues per CLAUDE.md, one at a time (not blocked, highest priority, lowest number first). SKIP any issue that already has an assignee. An assignee is a human''s claim and the nightly run must respect it. For each, the full issue lifecycle: in-progress label, branch impl-N, TDD until Definition of Done, reviewer subagents as step 5 of the lifecycle describes until APPROVED (fabrica:ui-reviewer only per the UI-review policy in factory.json; a reviewer that leaves PENDING FOR HUMAN after round 3 means needs-human), draft PR (auto-merge only if the issue has the auto-merge label). After finishing each issue, re-check eligibility: an auto-merged PR may have unblocked dependents. Stop when none are eligible or 5 are done.' }}
+          prompt: ${{ steps.prompt.outputs.text }}
           # 200/1000 turnos por el mismo motivo que el timeout: un worker que
           # se queda sin turnos a mitad de ticket no alcanza ni a commitear lo
           # que ya tenía verde.

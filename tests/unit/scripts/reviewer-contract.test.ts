@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -197,32 +198,69 @@ describe("configuración de modelos", () => {
 });
 
 describe("prompts del worker", () => {
-  it("el de process-backlog.sh remite a factory.json y a needs-human", () => {
-    const script = read("scripts/process-backlog.sh");
-    const prompt = flat(
-      script.slice(
-        script.indexOf('exec claude -p "'),
-        script.indexOf("--permission-mode", script.indexOf('exec claude -p "')),
-      ),
-    );
+  // El ciclo vive en las reglas. El prompt solo despacha: con el mismo
+  // comienzo que citan las reglas en "Autonomy boundary", para que el modelo
+  // lo reconozca como despacho, y remitiendo a los comandos de la cola.
+  const prompt = (...args: string[]) =>
+    execFileSync("bash", [pluginFile("scripts/worker-prompt.sh"), ...args], {
+      encoding: "utf8",
+    });
 
-    expect(prompt).toContain("factory.json");
-    expect(prompt).toContain("needs-human");
+  it("despacha una issue con fabrica-claim y fabrica-release, y remite a factory.json", () => {
+    const text = flat(prompt("one", "7"));
+
+    expect(text).toMatch(
+      /^Process GitHub issue #7 following the issue lifecycle in CLAUDE\.md/,
+    );
+    expect(text).toContain("fabrica-claim 7");
+    expect(text).toContain("fabrica-release 7 --needs-human");
+    expect(text).toContain("Closes #7");
+    expect(text).toContain("factory.json");
   });
 
-  it.each([
-    "Process GitHub issue #{0}",
-    "Process up to 5 eligible pending issues",
-  ])(
-    "el de claude-backlog.yml que empieza con «%s» remite a factory.json y a needs-human",
-    (opening) => {
-      const line = read(".github/workflows/claude-backlog.yml")
-        .split("\n")
-        .find((candidate) => candidate.includes(opening));
+  it("despacha un lote con fabrica-next-issue y respeta el máximo", () => {
+    const text = flat(prompt("batch", "3"));
 
-      expect(line).toBeDefined();
-      expect(line).toContain("factory.json");
-      expect(line).toContain("needs-human");
-    },
-  );
+    expect(text).toMatch(
+      /^Process up to 3 eligible pending issues per CLAUDE\.md/,
+    );
+    expect(text).toContain("fabrica-next-issue");
+    expect(text).toContain("fabrica-claim");
+    expect(text).toContain("needs-human");
+    expect(text).toContain("factory.json");
+  });
+
+  it("rechaza lo que no es un número", () => {
+    expect(() => prompt("one", "7; rm -rf /")).toThrow();
+    expect(() => prompt("batch", "x")).toThrow();
+  });
+
+  it("process-backlog.sh y claude-backlog.yml toman el prompt del generador", () => {
+    const script = read("scripts/process-backlog.sh");
+    const workflow = read(".github/workflows/claude-backlog.yml");
+
+    expect(script).toMatch(/worker-prompt\.sh" one "\$n"/);
+    expect(workflow).toContain("fabrica-worker-prompt one");
+    expect(workflow).toContain("fabrica-worker-prompt batch");
+    expect(workflow).toContain("prompt: ${{ steps.prompt.outputs.text }}");
+  });
+
+  it("el texto del despacho está en un solo lugar", () => {
+    for (const file of [
+      "scripts/process-backlog.sh",
+      ".github/workflows/claude-backlog.yml",
+    ]) {
+      expect(read(file), file).not.toContain("Process GitHub issue #");
+      expect(read(file), file).not.toContain(
+        "eligible pending issues per CLAUDE.md",
+      );
+    }
+  });
+
+  it("las reglas tienen lo que antes solo decían los prompts", () => {
+    const rules = flat(read("rules/fabrica.md"));
+
+    expect(rules).toMatch(/Commit as you go/);
+    expect(rules).toMatch(/assigned to someone else/);
+  });
 });
