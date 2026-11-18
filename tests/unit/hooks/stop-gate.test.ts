@@ -772,7 +772,7 @@ describe("guard de árbol limpio", () => {
       await runBashScript(
         workDir,
         `set -e
-         git checkout -q -b impl-7
+         git checkout -q -b mueve-codigo
          mkdir -p specs
          git mv src/lib/foo.ts specs/foo.ts
          git commit -q -m mueve`,
@@ -785,6 +785,73 @@ describe("guard de árbol limpio", () => {
         PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
       });
 
+      expect(await checksRan(markerFile)).toBe(true);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // Fase 5: la spec aprobada queda fija mientras se construye (principio III
+  // de la constitución). Que un worker no la toque no puede depender solo del
+  // texto de las reglas.
+  it.each([
+    ["commiteado", "git add -A && git commit -q -m toca-spec"],
+    ["sin commitear", "true"],
+    [
+      "ya pusheado",
+      "git add -A && git commit -q -m toca-spec && git push -q -u origin impl-7",
+    ],
+  ])(
+    "en una rama impl-N bloquea un cambio en specs/ (%s), sin correr los checks",
+    async (_case, after) => {
+      ({ workDir, originDir } = await createFixtureRepo());
+      const { code: prepared, stderr: prepError } = await runBashScript(
+        workDir,
+        `set -e
+         mkdir -p specs/12-favoritos
+         echo '- [ ] T001 algo' > specs/12-favoritos/tasks.md
+         git add -A && git commit -q -m spec && git push -q origin HEAD:main
+         git checkout -q -b impl-7
+         echo 'export const foo = 2;' > src/lib/foo.ts
+         echo '- [x] T001 algo' > specs/12-favoritos/tasks.md
+         ${after}`,
+      );
+      expect(prepared, prepError).toBe(0);
+      const { binDir, markerFile } = await installChecksRanMarkerBin();
+      stubBinDir = binDir;
+
+      const { code, stderr } = await runStopGate(workDir, {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      });
+
+      expect(code).toBe(2);
+      expect(stderr).toContain("specs/12-favoritos/tasks.md");
+      expect(stderr).toMatch(/needs-human/);
+      expect(await checksRan(markerFile)).toBe(false);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "en una rama impl-N que no toca specs/ corre los checks como siempre",
+    async () => {
+      ({ workDir, originDir } = await createFixtureRepo());
+      await runBashScript(
+        workDir,
+        `set -e
+         git checkout -q -b impl-7
+         echo 'export const foo = 2;' > src/lib/foo.ts
+         git commit -qam codigo`,
+      );
+      const { binDir, markerFile } = await installChecksRanMarkerBin();
+      stubBinDir = binDir;
+
+      const { code } = await runStopGate(workDir, {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      });
+
+      expect(code).toBe(0);
       expect(await checksRan(markerFile)).toBe(true);
     },
     REAL_PROCESS_TEST_TIMEOUT_MS,

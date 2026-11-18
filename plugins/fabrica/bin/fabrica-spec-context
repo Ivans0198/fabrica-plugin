@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# La parte de la spec que le toca a una issue: archivos, tareas y escenarios. 0 la imprimió, 1 issue suelta, 2 la spec no cuadra. Uso: fabrica-spec-context <N>
+exec bash "$(dirname "$(readlink -f "$0")")/../scripts/spec-context.sh" "$@"

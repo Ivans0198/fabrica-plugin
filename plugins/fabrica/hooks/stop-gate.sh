@@ -58,6 +58,48 @@ if [ ! -f "$FACTORY_CONFIG_FILE" ]; then
   exit 0
 fi
 
+fail() {
+  mkdir -p "$(dirname "$COUNTER_FILE")"
+  echo "$((COUNT + 1))" > "$COUNTER_FILE"
+  if [ "$COUNT" -ge "$MAX_GATE_RUNS" ]; then
+    echo "Stop gate has blocked $COUNT times. Giving up." >&2
+    echo "MANDATORY before you stop: do NOT open or mark ready any PR; label the issue needs-human and comment what is still red." >&2
+    mkdir -p .factory && date > .factory/gate-gave-up   # rastro para el orquestador
+    rm -f "$COUNTER_FILE"
+    exit 0
+  fi
+  echo "$1" >&2
+  exit 2
+}
+
+# Todo lo que cambió desde que la rama salió de la base: commits, ediciones y
+# archivos nuevos. Vacío si no hay origin/<base>.
+changed_since_base() {
+  local base merge_base
+  base=$(factory_read_value baseBranch 2>/dev/null)
+  base="${base:-main}"
+  merge_base=$(git merge-base HEAD "origin/$base" 2>/dev/null) || return 0
+  # --no-renames: a file moved from src/ to specs/ must show up as removed
+  # from src/, or moving code into specs/ would skip the gate.
+  {
+    git diff --no-renames --name-only "$merge_base" 2>/dev/null
+    git ls-files --others --exclude-standard 2>/dev/null
+  } | tr -d '\r' | sort -u
+}
+
+# Spec guard: an issue branch (impl-N) never changes specs/. The approved spec
+# is fixed while it is being built (constitution, principle III); work that
+# needs a different spec goes to a human. It runs before the other guards, so
+# a change already committed and pushed is caught too.
+if [[ "$(git branch --show-current 2>/dev/null)" =~ ^impl-[0-9]+$ ]]; then
+  spec_changes=$(changed_since_base | grep '^specs/' || true)
+  if [ -n "$spec_changes" ]; then
+    fail "❌ An issue branch must not change the approved spec. Changed under specs/:
+$spec_changes
+Revert those changes (git checkout origin/<base> -- <file>, then commit). If the work really needs a different spec, stop and release the issue with fabrica-release N --needs-human \"<what the spec is missing>\"."
+  fi
+fi
+
 # Review-only guard: if the session changed nothing beyond generated noise
 # (clean tree modulo GENERATED_NOISE_FILES, no commits beyond upstream),
 # there is nothing to verify. Don't run the full suite just to end a Q&A
@@ -108,16 +150,8 @@ fi
 # noise; anything else runs the full gate. Without origin/<base> it does not
 # apply.
 only_planning_changes() {
-  local base merge_base changed file
-  base=$(factory_read_value baseBranch 2>/dev/null)
-  base="${base:-main}"
-  merge_base=$(git merge-base HEAD "origin/$base" 2>/dev/null) || return 1
-  # --no-renames: a file moved from src/ to specs/ must show up as removed
-  # from src/, or moving code into specs/ would skip the gate.
-  changed=$({
-    git diff --no-renames --name-only "$merge_base" 2>/dev/null
-    git ls-files --others --exclude-standard 2>/dev/null
-  } | tr -d '\r' | sort -u)
+  local changed file
+  changed=$(changed_since_base)
   [ -n "$changed" ] || return 1
   while IFS= read -r file; do
     case "$file" in
@@ -133,20 +167,6 @@ if only_planning_changes; then
   rm -f "$COUNTER_FILE"
   exit 0
 fi
-
-fail() {
-  mkdir -p "$(dirname "$COUNTER_FILE")"
-  echo "$((COUNT + 1))" > "$COUNTER_FILE"
-  if [ "$COUNT" -ge "$MAX_GATE_RUNS" ]; then
-    echo "Stop gate has blocked $COUNT times. Giving up." >&2
-    echo "MANDATORY before you stop: do NOT open or mark ready any PR; label the issue needs-human and comment what is still red." >&2
-    mkdir -p .factory && date > .factory/gate-gave-up   # rastro para el orquestador
-    rm -f "$COUNTER_FILE"
-    exit 0
-  fi
-  echo "$1" >&2
-  exit 2
-}
 
 # Corre commands.<name> de factory.json y bloquea si falla. Un comando en null
 # no se corre. Si factory.json está mal, eso también bloquea: un gate que no
