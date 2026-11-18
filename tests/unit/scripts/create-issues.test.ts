@@ -244,7 +244,7 @@ interface Project {
   bin: string;
 }
 
-function project(): Project {
+function project(tasksMd = TASKS_MD): Project {
   const remote = temp("fabrica-remote-");
   spawnSync("git", ["init", "-q", "--bare", "-b", "main"], { cwd: remote });
   const dir = temp("fabrica-issues-");
@@ -255,7 +255,7 @@ function project(): Project {
     });
   git("init", "-q", "-b", "main");
   mkdirSync(path.join(dir, "specs/12-favoritos"), { recursive: true });
-  writeFileSync(path.join(dir, "specs/12-favoritos/tasks.md"), TASKS_MD);
+  writeFileSync(path.join(dir, "specs/12-favoritos/tasks.md"), tasksMd);
   writeFileSync(path.join(dir, ".gitignore"), ".factory/\n");
   git("add", "-A");
   git("commit", "-q", "-m", "spec");
@@ -553,6 +553,72 @@ describe("fabrica-create-issues", () => {
       expect(code).not.toBe(0);
       expect(out).toMatch(/❌/);
       expect(log(p).some((l) => l.startsWith("issue create"))).toBe(false);
+    },
+    TIMEOUT,
+  );
+
+  // Las dos historias conectan su cambio en src/cli.ts y suman tests a
+  // tests/cli.test.ts. Setup y Polish también tocan src/cli.ts, y las dos
+  // historias leen la misma spec: nada de eso cuenta, porque Setup va antes y
+  // Polish después, y specs/ no se edita.
+  const SHARED_TASKS_MD = TASKS_MD.replace(
+    "T004 Setup database schema",
+    "T004 Usar el esquema en src/cli.ts",
+  )
+    .replace(
+      "T010 [P] [US1] Contract test for saving in tests/favoritos.test.ts",
+      "T010 [P] [US1] Tests en tests/cli.test.ts, según specs/12-favoritos/contracts/cli.md",
+    )
+    .replace(
+      "T012 [US1] Implement save in src/favoritos.ts",
+      "T012 [US1] Implement save in src/favoritos.ts y conectarlo en `src/cli.ts`",
+    )
+    .replace(
+      "T020 [P] [US2] Test the list in tests/listar.test.ts",
+      "T020 [P] [US2] Tests en tests/cli.test.ts, según specs/12-favoritos/contracts/cli.md",
+    )
+    .replace(
+      "T021 [US2] Implement the list in src/listar.ts",
+      "T021 [US2] Implement the list in src/listar.ts (conectarlo en src/cli.ts)",
+    )
+    .replace("T030 Update the docs", "T030 Ayuda en src/cli.ts");
+
+  it(
+    "si dos historias en paralelo tocan el mismo archivo, no crea nada y nombra los archivos",
+    () => {
+      const p = project(SHARED_TASKS_MD);
+      const sha = writePlan(p, validPlan());
+
+      const { code, out } = create(p, sha);
+
+      expect(code).not.toBe(0);
+      expect(out).toContain(
+        "❌ US1 y US2 pueden ir en paralelo y las dos cambian src/cli.ts, tests/cli.test.ts",
+      );
+      expect(out).toMatch(/dependsOn/);
+      expect(out).toMatch(/Foundational/);
+      expect(out).not.toMatch(
+        /setup y|y polish|specs\/12-favoritos\/contracts/,
+      );
+      expect(log(p).some((l) => l.startsWith("issue create"))).toBe(false);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "si una de esas historias depende de la otra, las crea en orden",
+    () => {
+      const p = project(SHARED_TASKS_MD);
+      const plan = validPlan();
+      plan.issues[2]!.dependsOn.push("US1");
+      const sha = writePlan(p, plan);
+
+      const { code, out } = create(p, sha);
+
+      expect(code, out).toBe(0);
+      expect(byKey(p, "US2").labels).toContain(
+        `blocked-by-${byKey(p, "US1").n}`,
+      );
     },
     TIMEOUT,
   );

@@ -32,6 +32,13 @@ planeación se hace en una sesión interactiva y para.
      sus tareas con su OK;
    - cada historia se puede construir y probar sola; lo que todas necesitan
      está en Setup o Foundational, y lo que va después de todas, en Polish;
+   - dos historias que van en paralelo no cambian el mismo archivo: cada PR
+     se mergea bien solo, pero el segundo choca con el primero. Si las dos
+     conectan algo en el mismo archivo (el punto de entrada, un test
+     compartido), muéstraselo a la persona y que elija: pasar esa conexión a
+     Foundational, o que una historia dependa de la otra en "Dependencies &
+     Execution Order". `fabrica-create-issues` rechaza dos issues en paralelo
+     que nombran el mismo archivo en sus tareas;
    - ninguna historia es tan grande que su issue sería de tamaño L. Si lo es,
      pártela en la spec y vuelve a generar las tareas.
 

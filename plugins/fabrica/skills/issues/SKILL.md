@@ -77,7 +77,10 @@ Lee `spec.md`, `plan.md` y `tasks.md` de la carpeta y escribe
   las historias dependen de ella. El script le da la prioridad más alta de sus
   historias.
 - **Una issue de Polish**, que depende de todas las historias.
-- Una historia que depende de otra lo dice en `dependsOn`.
+- Una historia que depende de otra lo dice en `dependsOn`. También cuando
+  `tasks.md` pone a dos historias en paralelo pero sus tareas nombran el mismo
+  archivo: el script rechaza ese plan, porque sus PRs chocarían. Pregúntale a
+  la persona cuál va primero.
 - `tasks` lleva los IDs de las tareas de esa issue, incluidas sus tareas de
   test.
 - Tamaño S (hasta 2 horas) o M (hasta un día). Una L se parte en la spec antes

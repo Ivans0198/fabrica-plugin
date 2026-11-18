@@ -22,6 +22,9 @@ const PHASES = ["setup", "story", "polish"];
 const CONTROL = /[\u0000-\u001f\u007f]/;
 const MARKERS = /fabrica-(key|spec):/;
 const MAX_BODY = 60000;
+// Una ruta de archivo en el texto de una tarea: al menos una carpeta y una
+// extensión, como src/cli.ts.
+const PATH = /(?:^|[\s`(])((?:[\w.-]+\/)+[\w.-]+\.[A-Za-z0-9]+)/g;
 
 function stdinJson() {
   return JSON.parse(readFileSync(0, "utf8").replace(/^﻿/, ""));
@@ -35,13 +38,15 @@ function sha256(text) {
  * Historias, tareas y tareas de test de cada historia, leídas de tasks.md.
  * `owner` dice de qué issue es cada tarea según su fase: "setup" (Setup y
  * Foundational), "US<n>" o "polish". Una tarea fuera de esas fases no tiene
- * dueño y no se exige en ninguna issue.
+ * dueño y no se exige en ninguna issue. `files` dice qué archivos nombra cada
+ * tarea, sin los de specs/, que se leen y no se editan.
  */
 export function parseTasks(markdown) {
   const tasks = new Set();
   const stories = new Set();
   const testTasks = new Map();
   const owner = new Map();
+  const files = new Map();
   let story = null;
   let phaseOwner = null;
   let inTests = false;
@@ -66,13 +71,19 @@ export function parseTasks(markdown) {
     const task = line.match(/^\s*-\s*\[[ xX]\]\s+(T\d+)\b/);
     if (!task) continue;
     tasks.add(task[1]);
+    files.set(
+      task[1],
+      [...line.matchAll(PATH)]
+        .map((m) => m[1])
+        .filter((f) => !f.startsWith("specs/")),
+    );
     if (phaseOwner) owner.set(task[1], phaseOwner);
     if (inTests && story) {
       if (!testTasks.has(story)) testTasks.set(story, new Set());
       testTasks.get(story).add(task[1]);
     }
   }
-  return { tasks, stories, testTasks, owner };
+  return { tasks, stories, testTasks, owner, files };
 }
 
 /** De qué dueño de tasks.md puede llevar tareas una entrada del JSON. */
@@ -245,6 +256,8 @@ function validate(data, errors) {
 
   const order = topological(issues, fail);
   if (!order) return null;
+  checkSharedFiles(order, spec.files, fail);
+  if (errors.length) return null;
 
   // Setup bloquea a todas: hereda la prioridad más alta de sus historias.
   if (setups.length === 1 && storyEntries.size) {
@@ -277,6 +290,33 @@ function topological(issues, fail) {
     order.push(byKey.get(next.key));
   }
   return order;
+}
+
+// Dos issues que pueden ir en paralelo no cambian el mismo archivo: cada PR
+// se mergea bien solo, pero el segundo choca con el primero y nadie lo
+// rebasa. Que una dependa de la otra hace que la segunda arranque desde la
+// base con la primera ya mergeada.
+function checkSharedFiles(order, taskFiles, fail) {
+  const ancestors = new Map();
+  for (const e of order) {
+    const set = new Set(e.dependsOn);
+    for (const d of e.dependsOn) for (const a of ancestors.get(d)) set.add(a);
+    ancestors.set(e.key, set);
+  }
+  const filesOf = (e) =>
+    new Set(e.tasks.flatMap((t) => taskFiles.get(t) ?? []));
+  for (const [i, a] of order.entries()) {
+    for (const b of order.slice(i + 1)) {
+      if (ancestors.get(b.key).has(a.key) || ancestors.get(a.key).has(b.key))
+        continue;
+      const inA = filesOf(a);
+      const shared = [...filesOf(b)].filter((f) => inA.has(f)).sort();
+      if (shared.length)
+        fail(
+          `${a.key} y ${b.key} pueden ir en paralelo y las dos cambian ${shared.join(", ")}: sus PRs van a chocar. Haz que una dependa de la otra (dependsOn) o pasa ese cambio a una tarea de Foundational.`,
+        );
+    }
+  }
 }
 
 function entrySha(entry) {
