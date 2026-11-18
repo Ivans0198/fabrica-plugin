@@ -343,6 +343,8 @@ describe("comandos de la cola", () => {
       expect(sinPr.code).toBe(1);
       expect(sinPr.stderr).toMatch(/Closes #5/);
       expect(conPr.code).toBe(0);
+      // Un worker leyó el silencio como "no sé si pasó" (fabrica-prueba, #13).
+      expect(conPr.stdout).toMatch(/#5[^\n]*Closes #5/);
     },
     TIMEOUT,
   );
@@ -540,11 +542,11 @@ describe("comandos de la cola", () => {
       async () => {
         const { repo, env } = await project();
 
-        const { code } = await run(
-          ["eligible", "5", "--actor", "ana"],
-          repo,
-          { ...env, FAKE_LABELS_5: "blocked-by-9", FAKE_STATE_9: "CLOSED" },
-        );
+        const { code } = await run(["eligible", "5", "--actor", "ana"], repo, {
+          ...env,
+          FAKE_LABELS_5: "blocked-by-9",
+          FAKE_STATE_9: "CLOSED",
+        });
 
         expect(code).toBe(0);
       },
