@@ -105,6 +105,7 @@ case "${1:-}" in
   done)
     n=$(issue_number "${2:-}")
     pr_declares_closes "$n" || { echo "#$n no tiene un PR con \"Closes #$n\" en su descripción." >&2; exit 1; }
+    echo "✅ #$n tiene un PR con \"Closes #$n\" en su descripción."
     ;;
   *) usage ;;
 esac
