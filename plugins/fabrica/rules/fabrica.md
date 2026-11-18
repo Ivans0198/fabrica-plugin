@@ -168,6 +168,19 @@ Execute these steps IN ORDER:
 --remove-label "pending"`, branch `impl-N`, and
    `fabrica-task-status N "In Progress"`.
 
+   **The spec.** Then, in the worktree, run `fabrica-spec-context N`. With
+   exit 1 it is a standalone issue: the issue body is the whole ticket. With
+   exit 0 the issue is part of a feature in `specs/`, and it prints that
+   feature's files, this issue's tasks and, for a story, its acceptance
+   scenarios. Read those files. The tasks are your guide, in order and test
+   first, and the scenarios are acceptance criteria too. Never edit anything
+   under `specs/`, not even the `tasks.md` checkboxes (the Stop gate blocks
+   it), and never run `speckit-implement` or any other Spec Kit command. On
+   exit 2, or when the spec turns out wrong or incomplete for the work, stop
+   and give up with
+   `fabrica-release N --needs-human "<what the spec is missing>"`: the
+   approved spec only changes through a person.
+
 4. **TDD** until green (Definition of Done items 1–3). Commit as you go:
    every time a piece is green (tests passing, lint and types clean), commit
    it before starting the next one. The turn budget can run out without

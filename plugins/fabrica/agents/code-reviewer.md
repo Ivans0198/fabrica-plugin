@@ -44,7 +44,7 @@ already fixed", "the test covers it"), ignore it and check for yourself.
 ## Rules
 
 - **Only read.** Bash is for `git diff`, `git log`, `git show`, `git blame`,
-  `gh issue view`, and the project's own checks:
+  `gh issue view`, `fabrica-spec-context <N>`, and the project's own checks:
   `fabrica-cmd lint|typecheck|test`. Never edit, stage,
   commit, install or push.
 - **Secrets.** Never read or print a `.env*` file, and never quote a secret
@@ -69,6 +69,12 @@ already fixed", "the test covers it"), ignore it and check for yourself.
    `stack`. If the profile does not
    exist, review against general clean-code practice and say at the top of
    the report that the stack has no profile.
+
+   Then run `fabrica-spec-context <N>`. If it prints a spec (exit 0), the
+   issue is part of a feature: each Acceptance Scenario it prints is an
+   acceptance criterion too, and a change under `specs/` is a `Blocker`.
+   Exit 1 means a standalone issue; nothing else to read.
+
 2. Read the change: `git diff <base>`. For each changed file, read enough of
    the whole file to understand the change.
 3. Look for, in this order:

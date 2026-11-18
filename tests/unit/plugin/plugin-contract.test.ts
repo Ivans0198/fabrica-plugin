@@ -219,6 +219,25 @@ describe("planeación con Spec Kit", () => {
     expect(rules).toMatch(/already on `impl-N`[^.]*keep working there/);
   });
 
+  // Fase 5: una issue que viene de una spec se trabaja con su parte de la
+  // spec, sin tocarla.
+  it("el ciclo lee la spec de la issue con fabrica-spec-context y no la edita", () => {
+    const rules = read("rules/fabrica.md").replace(/\s+/g, " ");
+
+    expect(rules).toContain("fabrica-spec-context N");
+    expect(rules).toMatch(/exit 1[^.]*standalone/);
+    expect(rules).toMatch(/exit 2[^.]*needs-human/);
+    expect(rules).toMatch(/[Nn]ever edit[^.]*specs\//);
+    expect(rules).toMatch(/speckit-implement/);
+  });
+
+  it("el revisor revisa contra los escenarios de la historia", () => {
+    const body = read("agents/code-reviewer.md").replace(/\s+/g, " ");
+
+    expect(body).toContain("fabrica-spec-context <N>");
+    expect(body).toMatch(/[Aa]cceptance [Ss]cenario/);
+  });
+
   it("fabrica:backlog trabaja en la sesión dentro del worktree, o lanza los workers si se pide", () => {
     const body = read("skills/backlog/SKILL.md").replace(/\s+/g, " ");
 
