@@ -1,11 +1,9 @@
 # Reusable workflow: la fábrica en la nube. El proyecto lo llama desde
-# .github/workflows/claude-backlog.yml con dos disparos:
-#  1. Etiqueta `ready-for-dev` en un issue: Claude lo implementa.
-#  2. Cron nocturno: procesa hasta 5 issues `pending` elegibles.
+# .github/workflows/claude-backlog.yml cuando un issue recibe la etiqueta
+# `ready-for-dev`: Claude implementa esa issue, una por corrida.
 #
 # Credenciales (el proyecto pasa sus secretos con `secrets: inherit`):
-#   Cron nocturno → CLAUDE_CODE_OAUTH_TOKEN, o ANTHROPIC_API_KEY.
-#   Personas      → CLAUDE_TOKEN_<SU_USUARIO>, o ANTHROPIC_API_KEY.
+# CLAUDE_TOKEN_<SU_USUARIO> de quien puso la etiqueta, o ANTHROPIC_API_KEY.
 # El token de cada persona se busca por nombre: no hay mapa que mantener.
 # Requiere además la GitHub App de Claude instalada (github.com/apps/claude).
 name: claude-backlog
@@ -22,13 +20,12 @@ on:
 
 jobs:
   implement:
-    # Corre cuando un issue recibe ready-for-dev, o por cron o a mano.
-    if: github.event_name != 'issues' || github.event.label.name == 'ready-for-dev'
+    # Solo con ready-for-dev. Una llamada vieja con los disparos que ya no
+    # existen (el turno nocturno, a mano) no corre nada.
+    if: github.event_name == 'issues' && github.event.label.name == 'ready-for-dev'
     runs-on: ubuntu-latest
-    # 120/350 min por debajo del tope de 6h de GitHub. El cron procesa hasta 5
-    # tickets en una sola sesión y necesita más colchón que el disparo por
-    # etiqueta, que procesa uno solo.
-    timeout-minutes: ${{ github.event_name == 'schedule' && 350 || 120 }}
+    # Por debajo del tope de 6h de GitHub.
+    timeout-minutes: 120
     concurrency:
       group: claude-backlog-${{ github.event.issue.number || github.run_id }}
       cancel-in-progress: false
@@ -118,23 +115,7 @@ jobs:
           NUM: ${{ github.event.issue.number }}
         run: |
           pick() { jq -r --arg k "$1" '.[$k] // empty' <<< "$SECRETS_JSON"; }
-          CRON_OAUTH=$(pick CLAUDE_CODE_OAUTH_TOKEN)
           DEFAULT_API=$(pick ANTHROPIC_API_KEY)
-          if [ "${GITHUB_EVENT_NAME}" = "schedule" ]; then
-            # Turno nocturno: bolsa del cron, luego API key de equipo.
-            if [ -n "$CRON_OAUTH" ]; then
-              echo "🔑 Credencial: CLAUDE_CODE_OAUTH_TOKEN (bolsa del cron)"
-              { echo "oauth=$CRON_OAUTH"; echo "api="; } >> "$GITHUB_OUTPUT"
-            elif [ -n "$DEFAULT_API" ]; then
-              echo "🔑 Credencial: ANTHROPIC_API_KEY (API key de equipo)"
-              { echo "oauth="; echo "api=$DEFAULT_API"; } >> "$GITHUB_OUTPUT"
-            else
-              echo "::error title=Sin credencial::el cron no tiene CLAUDE_CODE_OAUTH_TOKEN ni ANTHROPIC_API_KEY"
-              exit 1
-            fi
-            exit 0
-          fi
-          # Las personas nunca usan la bolsa del cron.
           A="${GITHUB_ACTOR^^}"; A="${A//[^A-Z0-9]/_}"; KEY="CLAUDE_TOKEN_$A"
           TOKEN=$(pick "$KEY")
           if [ -n "$TOKEN" ]; then
@@ -158,14 +139,9 @@ jobs:
         if: steps.gate.outputs.skip != 'true'
         id: prompt
         env:
-          EVENT: ${{ github.event_name }}
           NUM: ${{ github.event.issue.number }}
         run: |
-          if [ "$EVENT" = issues ]; then
-            text=$(fabrica-worker-prompt one "$NUM")
-          else
-            text=$(fabrica-worker-prompt batch 5)
-          fi
+          text=$(fabrica-worker-prompt one "$NUM")
           {
             echo "text<<FABRICA_PROMPT_EOF"
             echo "$text"
@@ -192,10 +168,9 @@ jobs:
           plugin_marketplaces: ${{ runner.temp }}/fabrica-plugin
           plugins: fabrica@fabrica-local
           prompt: ${{ steps.prompt.outputs.text }}
-          # 200/1000 turnos por el mismo motivo que el timeout: un worker que
-          # se queda sin turnos a mitad de ticket no alcanza ni a commitear lo
-          # que ya tenía verde.
-          claude_args: "--max-turns ${{ github.event_name == 'schedule' && 1000 || 200 }} --model ${{ env.FACTORY_MODEL }} --disallowedTools ${{ env.WORKER_DISALLOWED_TOOLS }}"
+          # Un worker que se queda sin turnos a mitad de ticket no alcanza ni a
+          # commitear lo que ya tenía verde.
+          claude_args: "--max-turns 200 --model ${{ env.FACTORY_MODEL }} --disallowedTools ${{ env.WORKER_DISALLOWED_TOOLS }}"
 
       # Sin esto no hay forma de ver qué hizo el agente: la Action oculta su
       # salida, también en modo debug. Repos privados: la ven quienes ya

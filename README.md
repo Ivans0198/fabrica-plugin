@@ -79,12 +79,11 @@ Stop gates.
 Cada proyecto pasa sus secretos a los workflows de backlog y menciones con
 `secrets: inherit`:
 
-| Secreto                   | Para qué                                                                  |
-| ------------------------- | ------------------------------------------------------------------------- |
-| `CLAUDE_CODE_OAUTH_TOKEN` | El cron nocturno.                                                         |
-| `CLAUDE_TOKEN_<USUARIO>`  | El token de cada persona, buscado por su usuario de GitHub en mayúsculas. |
-| `ANTHROPIC_API_KEY`       | Opcional: API key de equipo, si una persona no tiene token propio.        |
-| `FABRICA_PLUGIN_TOKEN`    | Solo si este repo es privado: un token que pueda leerlo.                  |
+| Secreto                  | Para qué                                                                  |
+| ------------------------ | ------------------------------------------------------------------------- |
+| `CLAUDE_TOKEN_<USUARIO>` | El token de cada persona, buscado por su usuario de GitHub en mayúsculas. |
+| `ANTHROPIC_API_KEY`      | Opcional: API key de equipo, si una persona no tiene token propio.        |
+| `FABRICA_PLUGIN_TOKEN`   | Solo si este repo es privado: un token que pueda leerlo.                  |
 
 El reusable trae el plugin en el tag de la llamada y la Action lo instala
 desde esa copia. Si este repo es privado, además hay que darle acceso a sus

@@ -3,7 +3,6 @@
 # process-backlog.sh y el de claude-backlog.yml.
 #
 #   worker-prompt.sh one N      una issue
-#   worker-prompt.sh batch M    hasta M issues elegibles, de a una
 #
 # Solo despacha. El ciclo entero vive en las reglas ("Issue lifecycle" de
 # .factory/rules/fabrica.md, importado desde CLAUDE.md): un prompt que lo
@@ -25,14 +24,8 @@ case "${1:-}" in
 Process GitHub issue #$n following the issue lifecycle in CLAUDE.md, every step in order. Claim it with \`fabrica-claim $n\` and work in the path it prints. The reviewer models and the UI-review policy are in factory.json. Finish with a draft PR whose body says "Closes #$n", and check it with \`fabrica-check-done $n\`. If you are blocked, or a reviewer still has open Blocker or Major findings after round 3, give up with \`fabrica-release $n --needs-human "<why>"\`.
 EOF
     ;;
-  batch)
-    m=$(number "${2:-}")
-    cat <<EOF
-Process up to $m eligible pending issues per CLAUDE.md, one at a time, each through the whole issue lifecycle. \`fabrica-next-issue\` picks the next one (exit 1: none left, stop). \`fabrica-claim N\` claims it (exit 2: someone else has it, pick the next). The reviewer models and the UI-review policy are in factory.json. Each issue ends in a draft PR with "Closes #N" (checked with \`fabrica-check-done N\`) or in needs-human via \`fabrica-release N --needs-human "<why>"\`. After each one, pick again: an auto-merged PR may have unblocked others. Stop when none are eligible or $m are done.
-EOF
-    ;;
   *)
-    sed -n '5,6p' "${BASH_SOURCE[0]}" | sed 's/^# *//' >&2
+    sed -n '5p' "${BASH_SOURCE[0]}" | sed 's/^# *//' >&2
     exit 64
     ;;
 esac

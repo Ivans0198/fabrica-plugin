@@ -414,12 +414,11 @@ repository`. Se instala una vez por cuenta, en github.com/apps/claude →
 Install, eligiendo este repo o todos. No se puede comprobar con `gh`: solo
 una App lista sus instalaciones. Pídele que confirme que la instaló.
 
-Después, corre `gh secret list`. Si falta `CLAUDE_CODE_OAUTH_TOKEN` (la bolsa del cron)
-o `CLAUDE_TOKEN_<USUARIO_EN_MAYUSCULAS>` (el token personal, para menciones y
-`ready-for-dev`), recuérdale los comandos exactos (ambos llevan el mismo valor):
+Después, corre `gh secret list`. Si falta `CLAUDE_TOKEN_<USUARIO_EN_MAYUSCULAS>`
+(el token personal, para menciones y `ready-for-dev`), recuérdale el comando
+exacto:
 
 ```bash
-gh secret set CLAUDE_CODE_OAUTH_TOKEN
 gh secret set CLAUDE_TOKEN_SU_USUARIO
 ```
 

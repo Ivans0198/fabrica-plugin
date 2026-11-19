@@ -236,7 +236,7 @@ ensure_worker_worktree() {  # issue number
 }
 
 # Reclama la issue por assignee y la vuelve a leer: si otra persona (un
-# compañero, el cron de la nube) ganó la carrera, suelta el reclamo.
+# compañero, la nube) ganó la carrera, suelta el reclamo.
 # Devuelve 0 si la issue es nuestra y 2 si es de otro. Sin usuario de gh (ME
 # vacío) no hay reclamo posible y la da por nuestra.
 claim_issue() {  # issue number
@@ -366,7 +366,7 @@ open_blockers() {  # issue number
 }
 
 # ¿Se puede tomar N por pedido de `actor` (quien puso ready-for-dev)? 0 si sí,
-# y se la asigna, para que el cron y las sesiones locales respeten el
+# y se la asigna, para que la nube y las sesiones locales respeten el
 # reclamo; 2 si está asignada a otra persona; 3 si la bloquea una issue
 # abierta. La misma regla que la cola local.
 issue_eligible_for() {  # issue number, actor

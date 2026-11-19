@@ -75,10 +75,9 @@ is **a procedure to follow when dispatched**, not a standing order to go look
 for work. Run it ONLY when one of these is true:
 
 - **The session opened with a prompt telling you to process issues**, e.g.
-  "Process GitHub issue #N following the issue lifecycle in CLAUDE.md…" or
-  "Process up to 5 eligible pending issues per CLAUDE.md…". That is what
-  `fabrica-backlog` and the `claude-backlog.yml` workflow (the
-  `ready-for-dev` label and the nightly cron) send.
+  "Process GitHub issue #N following the issue lifecycle in CLAUDE.md…".
+  That is what `fabrica-backlog` and the `claude-backlog.yml` workflow (the
+  `ready-for-dev` label) send.
 - **The human in this session said so, naming the work**: "trabaja el #3",
   "implementa el ticket 7", "procesa el backlog".
 - **An `@claude` mention asked for the work by name** ("@claude implementa
@@ -119,9 +118,9 @@ mid-ticket to ask for any of this:
 
 - The lifecycle's own machinery: labels, branch, commits, push, draft PR, and
   the `auto-merge` path when the human already put that label on the issue.
-- **The scope the prompt states.** "Process up to 5 eligible pending issues"
-  authorizes all five, including re-checking eligibility after each one. Finish
-  the run the prompt asked for; do not stop after the first issue.
+- **The issue the prompt names.** "Process GitHub issue #N" authorizes the
+  whole lifecycle for #N, up to its draft PR or its `needs-human`. Finish it;
+  do not stop halfway to ask.
 - **Issues the lifecycle itself tells you to open**: the `priority:high` "main
   roto por #X" of the "Exceptional situations" section, or any blocker you must
   file to hand the ticket back safely. These are incident reports, not
@@ -145,7 +144,7 @@ Execute these steps IN ORDER:
 1. **Pick** the next `pending` issue that is not blocked (lowest number first,
    respecting `priority:high` > `priority:medium` > `priority:low`).
    Skip issues assigned to someone else: an assignee is a human's claim,
-   and the nightly run respects it too. `fabrica-next-issue` prints the
+   and the cloud respects it too. `fabrica-next-issue` prints the
    issue, applying exactly this rule.
 
 2. **Already-done check (idempotency), BEFORE writing any code.** Verify the

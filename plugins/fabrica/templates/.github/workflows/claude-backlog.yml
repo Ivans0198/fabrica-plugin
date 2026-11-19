@@ -2,9 +2,8 @@
 # de este proyecto. Lo escribe fabrica-setup: se actualiza con
 # `fabrica-setup refresh`.
 #
-# Disparos: la etiqueta `ready-for-dev` en un issue, el cron nocturno y a mano.
+# Disparo: la etiqueta `ready-for-dev` en un issue. Trabaja esa issue sola.
 # Credenciales, como secretos del repo:
-#   CLAUDE_CODE_OAUTH_TOKEN      la bolsa del cron
 #   CLAUDE_TOKEN_<SU_USUARIO>    el token de cada persona (claude setup-token)
 #   ANTHROPIC_API_KEY            opcional, API key de equipo
 name: claude-backlog
@@ -12,9 +11,6 @@ name: claude-backlog
 on:
   issues:
     types: [labeled]
-  schedule:
-    - cron: "0 16 * * *" # 02:00 en Sídney (UTC+10). Ajústalo a tu zona.
-  workflow_dispatch: {}
 
 permissions:
   contents: write

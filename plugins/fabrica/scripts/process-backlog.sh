@@ -257,7 +257,7 @@ main() {
     echo "▶ Processing issue #$N (attempt $((PROCESSED + 1))/$MAX_ISSUES)"
 
     # Claim-and-verify: grab the issue by assignee, re-read, and back off if
-    # someone else (a teammate, the nightly cron) won the race.
+    # someone else (a teammate, the cloud) won the race.
     if ! claim_issue "$N"; then
       echo "⚔ #$N ya está reclamado por otra persona, lo salto"
       SKIPPED="${SKIPPED:-} $N"
