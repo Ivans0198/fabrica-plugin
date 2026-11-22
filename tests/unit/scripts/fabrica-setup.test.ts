@@ -37,6 +37,7 @@ const CALLERS = [
   "claude-backlog.yml",
   "claude-mentions.yml",
   "labels-cleanup.yml",
+  "pr-conflicts.yml",
 ];
 
 /** Lanzan bash y git de verdad. */

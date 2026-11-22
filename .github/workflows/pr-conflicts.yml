@@ -1,0 +1,51 @@
+# Reusable workflow: avisa en los PRs de la fábrica que chocan con la rama
+# principal. Un PR choca después de abierto cuando se mergea otro, y nadie le
+# hace rebase. No lo resuelve: etiqueta merge-conflict y comenta una vez, y
+# quita la etiqueta cuando el PR vuelve a poder mergearse. Sin Claude: gratis,
+# con el token de GitHub.
+name: pr-conflicts
+
+on:
+  workflow_call:
+    inputs:
+      fabrica_repo:
+        required: true
+        type: string
+      fabrica_ref:
+        required: true
+        type: string
+    secrets:
+      FABRICA_PLUGIN_TOKEN:
+        required: false
+
+jobs:
+  conflicts:
+    # Un push a otra rama no mueve la base de ningún PR.
+    if: >-
+      github.event_name == 'pull_request' ||
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    # Dos corridas a la vez comentarían dos veces el mismo PR.
+    concurrency:
+      group: pr-conflicts-${{ github.repository }}
+      cancel-in-progress: false
+    permissions:
+      # Las etiquetas de un PR van por la API de issues.
+      issues: write
+      pull-requests: write
+      # Sin esto, el checkout de un repo privado falla con 403.
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Trae el plugin fabrica
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ inputs.fabrica_repo }}
+          ref: ${{ inputs.fabrica_ref }}
+          path: .fabrica-plugin
+          token: ${{ secrets.FABRICA_PLUGIN_TOKEN || github.token }}
+          persist-credentials: false
+      - name: Avisa en los PRs que chocan
+        run: bash .fabrica-plugin/plugins/fabrica/scripts/flag-conflicts.sh

@@ -340,6 +340,11 @@ con squash: avisa en vez de borrar trabajo.
   pero con obligación de marcar `needs-human` y prohibición de abrir/marcar
   listo el PR. Y solo mergea sola donde TÚ pusiste `auto-merge`. Y
   cualquier merge se deshace con el botón "Revert" del PR; git nunca olvida.
+- Si un PR de la fábrica deja de poder mergearse porque choca con `main` (pasa
+  cuando se mergea otro antes), la fábrica le pone **`merge-conflict`** y
+  comenta una vez. No lo resuelve sola: un merge con los tests en verde puede
+  estar mal igual. Resuélvelo a mano y revísalo comparándolo con las dos
+  ramas; la etiqueta se quita sola cuando vuelve a poder mergearse.
 - Si un comando te falla en la terminal, copia el error completo y pégaselo a
   Claude: "me salió este error, ayúdame".
 

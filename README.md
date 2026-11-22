@@ -21,7 +21,7 @@ Este README es la referencia técnica.
 | Spec Kit                  | `speckit-bundle/`                           | Spec Kit 1.2.2 de `github/spec-kit` (MIT), con sus comandos en `commands/`. No son skills: solo los siguen `fabrica:spec`, `plan` y `tasks`. Nadie lo instala.                                                           |
 | Comandos para el modelo   | `bin/`                                      | `fabrica-cmd`, `fabrica-task-status`, `fabrica-setup`, `fabrica-backlog`, los de la cola (`fabrica-next-issue`, `fabrica-claim`, `fabrica-release`, `fabrica-check-done`, `fabrica-cleanup`) y otros. Quedan en su PATH. |
 | Archivos de cada proyecto | `templates/`                                | Lo que `init` escribe en el proyecto: `CLAUDE.md`, `factory.json`, permisos y llamadas a los workflows.                                                                                                                  |
-| Reusable workflows        | `.github/workflows/` (raíz de este repo)    | Checks, la fábrica en la nube, menciones a `@claude`, etiquetas y líneas base visuales.                                                                                                                                  |
+| Reusable workflows        | `.github/workflows/` (raíz de este repo)    | Checks, la fábrica en la nube, menciones a `@claude`, etiquetas, aviso de PRs en conflicto y líneas base visuales.                                                                                                       |
 
 ## Instalar
 

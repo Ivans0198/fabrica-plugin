@@ -25,7 +25,7 @@ PLUGIN_ROOT="${FABRICA_PLUGIN_ROOT:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 TEMPLATES="$PLUGIN_ROOT/templates"
 VERSION_FILE=".factory/version"
 MANIFEST=".factory/manifest.json"
-WORKFLOWS="checks claude-backlog claude-mentions labels-cleanup"
+WORKFLOWS="checks claude-backlog claude-mentions labels-cleanup pr-conflicts"
 SPECKIT_BUNDLE="$PLUGIN_ROOT/speckit-bundle"
 SPECKIT_STAMP=".specify/fabrica-version"
 

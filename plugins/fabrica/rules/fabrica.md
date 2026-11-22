@@ -137,7 +137,10 @@ Queue states are GitHub labels: `pending` → `in-progress`. There is NO `done`
 label: the final state is the issue **closed** (the PR's `Closes #N` does it on
 merge, and `labels-cleanup.yml` strips the queue labels). Never create or apply
 a `done` label. Dependencies: label `blocked-by-N`; an issue is eligible only
-when all its blockers are closed.
+when all its blockers are closed. `merge-conflict` on a PR means it no longer
+merges with the base branch (`pr-conflicts.yml` sets and clears it). Never
+resolve that conflict on your own initiative: green tests do not prove a
+merge is right. Leave it to the person, unless they ask you to.
 
 Execute these steps IN ORDER:
 
