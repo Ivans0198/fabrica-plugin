@@ -252,6 +252,8 @@ los servidores de GitHub, y tu PC puede estar apagado. Tienes dos gatillos:
    del celular si quieres) → GitHub arranca una máquina y procesa ese issue,
    uno por corrida. Si el issue todavía espera a otro (`blocked-by-N`) o
    está asignado a otra persona, la nube no lo toma y lo dice en el issue.
+   Mientras tenga la etiqueta, es de la nube: `/fabrica:backlog` en tu
+   computador se lo salta. Para que lo haga tu computador, quítasela.
 2. **Menciones `@claude`:** comenta `@claude ...` en cualquier issue y te
    responde en el mismo hilo. Sirve para preguntas y para pedir un cambio
    puntual. Para planear no: la spec, el plan, las tareas y las issues de una
@@ -442,7 +444,7 @@ seguir". Si no la agregas, funcionará a veces; si la agregas, siempre.
 | **process-backlog**      | Lo que corre `/fabrica:backlog`: busca la siguiente tarea sin bloqueos y lanza un Claude a trabajarla.                                                                                    | Plugin (`scripts/`)                   |
 | **fabrica-ui-preflight** | Levanta el servidor de ESTA app y le prohíbe al ui-reviewer fotografiar cualquier otro que ya esté respondiendo. Sin él, otro proyecto en el mismo puerto se revisa en silencio.          | Plugin (`bin/`)                       |
 | **fabrica-task-status**  | Mueve las tarjetas del tablero ("In Progress", "Blocked"). Done lo pone GitHub solo al mergear.                                                                                           | Plugin (`bin/`)                       |
-| **claude-backlog.yml**   | La fábrica en la nube: el turno de noche (por horario, o al etiquetar `ready-for-dev`). Hasta 5 tareas por corrida.                                                                       | `.github/workflows/`, llama al plugin |
+| **claude-backlog.yml**   | La fábrica en la nube: trabaja una issue cuando le pones `ready-for-dev`, una por corrida.                                                                                                | `.github/workflows/`, llama al plugin |
 | **claude-mentions.yml**  | Responde a `@claude` en issues y comentarios: tu línea directa desde el celular.                                                                                                          | `.github/workflows/`, llama al plugin |
 
 ---

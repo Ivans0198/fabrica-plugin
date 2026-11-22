@@ -6,6 +6,8 @@ name: pr-conflicts
 on:
   # Un merge mueve la rama principal y puede hacer chocar a los otros PRs.
   push:
+  # GitHub no dispara pull_request en un PR que ya choca: esto solo quita la
+  # etiqueta cuando el PR se resuelve.
   pull_request:
     types: [opened, reopened, synchronize]
 

@@ -145,7 +145,8 @@ merge is right. Leave it to the person, unless they ask you to.
 Execute these steps IN ORDER:
 
 1. **Pick** the next `pending` issue that is not blocked (lowest number first,
-   respecting `priority:high` > `priority:medium` > `priority:low`).
+   respecting `priority:high` > `priority:medium` > `priority:low`). An issue
+   labeled `ready-for-dev` belongs to the cloud: a local run never picks it.
    Skip issues assigned to someone else: an assignee is a human's claim,
    and the cloud respects it too. `fabrica-next-issue` prints the
    issue, applying exactly this rule.
