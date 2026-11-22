@@ -375,12 +375,16 @@ HTTP 200, bájalo). Son exactamente los que correrán el Stop gate y el CI: si
 uno no corre aquí, el gate del primer ticket fallará por lo mismo. Arregla lo
 rojo antes de seguir. **No reportes éxito por suposición.**
 
-**Excluye `.claude/worktrees/` y `.factory/` de la configuración del linter**
-(y del typechecker si también recorre el árbol). La fábrica deja ahí un
-checkout completo por cada ticket que trabaja, así que un `lint .` los recorre
-y reporta el repo entero tantas veces como worktrees haya. El gate de lint deja
-de servir a partir de la primera corrida, y lo que ves son cientos de errores
-de código que ya está mergeado.
+**Excluye `.claude/worktrees/` y `.factory/` de la configuración del linter
+y del corredor de tests** (y del typechecker si también recorre el árbol). La
+fábrica deja ahí un checkout completo por cada ticket que trabaja, así que un
+`lint .` los recorre y reporta el repo entero tantas veces como worktrees
+haya. El gate de lint deja de servir a partir de la primera corrida, y lo que
+ves son cientos de errores de código que ya está mergeado. Con los tests pasa
+lo mismo, y es peor: casi todos los corredores (vitest, jest, pytest) buscan
+tests en todo el árbol, así que corren también los de otras ramas, y el Stop
+gate bloquea la sesión por un test rojo que no es suyo. Comprueba que el
+número de tests no cambia con un worktree creado.
 
 ```bash
 git add -A
