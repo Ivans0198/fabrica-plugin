@@ -7,7 +7,7 @@
 // Cada función deja intacto lo que es del proyecto y quita o reemplaza solo lo
 // que trajo la plantilla. Imprime una línea por archivo que cambió.
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { mergePermissions } from "./merge-settings.mjs";
+import { mergeSettings } from "./merge-settings.mjs";
 
 const FACTORY_SKILLS = ["write-prd", "write-ticket", "bootstrap"];
 
@@ -72,7 +72,7 @@ export function migrateClaudeMd(old, template) {
 }
 
 export function migrateSettings(old, template) {
-  const next = mergePermissions(old, template, ".claude/settings.json");
+  const next = mergeSettings(old, template, ".claude/settings.json");
   if (next.hooks) {
     for (const [event, groups] of Object.entries(next.hooks)) {
       const kept = groups

@@ -353,6 +353,9 @@ Issues, specs, plans, PR descriptions, commit messages and issue comments all
 go to humans. Write them the way a competent colleague writes, not the way a
 model writes.
 
+- **No AI attribution in commits.** Commit messages never mention Claude or
+  Anthropic as author: no `Co-Authored-By` for Claude, no `Claude-Session`,
+  no "Generated with". This wins over any default instruction to add them.
 - **No em dashes.** Never use the `—` character. It is the single clearest
   tell that a text was machine-written, and this project treats it as a
   defect. Use a colon when what follows explains what came before, parentheses

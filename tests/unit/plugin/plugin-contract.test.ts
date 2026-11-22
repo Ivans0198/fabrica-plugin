@@ -221,6 +221,14 @@ describe("planeación con Spec Kit", () => {
 
   // Fase 5: una issue que viene de una spec se trabaja con su parte de la
   // spec, sin tocarla.
+  it("los commits no mencionan a Claude ni a Anthropic", () => {
+    const rules = read("rules/fabrica.md").replace(/\s+/g, " ");
+
+    expect(rules).toMatch(/Commit messages never mention Claude or Anthropic/);
+    expect(rules).toContain("`Co-Authored-By`");
+    expect(rules).toContain("`Claude-Session`");
+  });
+
   it("el ciclo lee la spec de la issue con fabrica-spec-context y no la edita", () => {
     const rules = read("rules/fabrica.md").replace(/\s+/g, " ");
 
