@@ -274,6 +274,21 @@ describe("planeación con Spec Kit", () => {
     expect(section).toMatch(/401/);
   });
 
+  // vitest en la raíz de fabrica-prueba corrió también los tests de cada
+  // worktree (196 en vez de 62, 2 en rojo de otra rama, 2026-11-22): el Stop
+  // gate de la raíz bloqueaba por código que no era de esa sesión.
+  it("el bootstrap excluye los worktrees también del corredor de tests", () => {
+    const verify = read("skills/bootstrap/SKILL.md")
+      .split("## Fase 3: Verificación real y commit")[1]!
+      .split("## Fase 4")[0]!
+      .replace(/\s+/g, " ");
+    const rule = verify
+      .split("**")
+      .find((part) => part.includes(".claude/worktrees/"));
+
+    expect(rule).toMatch(/corredor de tests/);
+  });
+
   it("el aviso de falla de la nube nombra la GitHub App", () => {
     const workflow = readFileSync(
       path.join(REPO_ROOT, ".github/workflows/claude-backlog.yml"),

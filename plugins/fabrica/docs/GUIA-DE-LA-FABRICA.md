@@ -316,8 +316,11 @@ reabre/reintenta. No necesitas comandos.
 > vuelve a cerrar el issue, pero gasta una corrida.)
 
 **Los talleres de los obreros.** Cada ticket se trabaja en una copia aparte del
-repo (un _worktree_) dentro de `.claude/worktrees/impl-N`. No se commitean y no
-estorban, pero ocupan disco. Para borrar los de issues ya cerradas:
+repo (un _worktree_) dentro de `.claude/worktrees/impl-N`. No se commitean,
+pero el linter y el corredor de tests del proyecto tienen que ignorarlos: si
+no, revisan el código de otras ramas y el Stop gate bloquea por un test que no
+es tuyo. El bootstrap los excluye; en un proyecto anterior a la 0.3.4,
+revísalo. Ocupan disco. Para borrar los de issues ya cerradas:
 
 ```bash
 fabrica-cleanup --dry-run   # lista lo que borraría
