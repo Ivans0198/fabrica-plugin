@@ -4,8 +4,7 @@
 # necesita una sesión interactiva.
 #
 # Credencial: token personal del actor (CLAUDE_TOKEN_<USUARIO>) o API key de
-# equipo, de los secretos que el proyecto pasa con `secrets: inherit`. La bolsa
-# del cron (CLAUDE_CODE_OAUTH_TOKEN) no se usa aquí.
+# equipo, de los secretos que el proyecto pasa con `secrets: inherit`.
 # Solo OWNER, MEMBER o COLLABORATOR pueden invocarlo.
 name: claude-mentions
 

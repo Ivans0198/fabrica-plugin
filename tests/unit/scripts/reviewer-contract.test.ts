@@ -218,21 +218,9 @@ describe("prompts del worker", () => {
     expect(text).toContain("factory.json");
   });
 
-  it("despacha un lote con fabrica-next-issue y respeta el máximo", () => {
-    const text = flat(prompt("batch", "3"));
-
-    expect(text).toMatch(
-      /^Process up to 3 eligible pending issues per CLAUDE\.md/,
-    );
-    expect(text).toContain("fabrica-next-issue");
-    expect(text).toContain("fabrica-claim");
-    expect(text).toContain("needs-human");
-    expect(text).toContain("factory.json");
-  });
-
   it("rechaza lo que no es un número", () => {
     expect(() => prompt("one", "7; rm -rf /")).toThrow();
-    expect(() => prompt("batch", "x")).toThrow();
+    expect(() => prompt("batch", "3")).toThrow();
   });
 
   it("process-backlog.sh y claude-backlog.yml toman el prompt del generador", () => {
@@ -241,7 +229,6 @@ describe("prompts del worker", () => {
 
     expect(script).toMatch(/worker-prompt\.sh" one "\$n"/);
     expect(workflow).toContain("fabrica-worker-prompt one");
-    expect(workflow).toContain("fabrica-worker-prompt batch");
     expect(workflow).toContain("prompt: ${{ steps.prompt.outputs.text }}");
   });
 

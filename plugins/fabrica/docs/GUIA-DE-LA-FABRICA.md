@@ -101,27 +101,24 @@ El repositorio de GitHub ya lo creaste tú con el Comando 1; bootstrap solo
 verifica y te dice a qué repo va a escribir. El **tablero** (que es otra cosa)
 no se crea solo: te lo ofrece al final, en la Fase 4.
 
-**Comando 3: las DOS llaves de la nube** (los secretos van por repo; hay que
-plantarlos en cada uno):
+**Comando 3: la llave de la nube** (los secretos van por repo; hay que
+plantarla en cada uno):
 
 ```
-gh secret set CLAUDE_CODE_OAUTH_TOKEN        # la bolsa del turno NOCTURNO (cron)
 gh secret set CLAUDE_TOKEN_TU_USUARIO        # TU token personal (menciones @claude y ready-for-dev)
 ```
 
-En ambos pega el token que guardaste en la Parte 1 (sí, el mismo valor: son
-dos cerraduras, una llave). El nombre del segundo lleva tu usuario de
+Pega el token que guardaste en la Parte 1. El nombre lleva tu usuario de
 GitHub en MAYÚSCULAS (guiones → `_`): ej. `CLAUDE_TOKEN_IVANS0198`.
 
-¿Por qué dos? El común paga solo el trabajo que nadie pidió (el cron); todo
-lo que pide una persona se cobra a SU token, así que en equipo nadie
-subsidia a nadie (Parte 8). Verifica con `gh secret list` que estén los dos.
+Todo lo que pide una persona se cobra a SU token, así que en equipo nadie
+subsidia a nadie (Parte 8). Verifica con `gh secret list` que esté.
 
 Los workflows buscan `CLAUDE_TOKEN_<TU_USUARIO>` por nombre: no hay que
 editarlos para sumarte. Si el repo del plugin es privado, planta además
 `FABRICA_PLUGIN_TOKEN`, un token que pueda leer ese repo.
 
-Sin esto, la fábrica nocturna y las menciones @claude no funcionan (el
+Sin esto, la etiqueta `ready-for-dev` y las menciones @claude no funcionan (el
 Claude que corre en GitHub no tiene cómo autenticarse). También necesitas
 **una vez por cuenta** la GitHub App de Claude instalada:
 github.com/apps/claude → Install → All repositories.
@@ -200,8 +197,8 @@ esperarán.
 
 > 🛑 **Crear las issues NO arranca nada.** Al terminar, Claude te resume qué
 > creó y se detiene, aunque el siguiente ticket sea obvio. La fábrica solo se
-> pone a programar cuando TÚ la sueltas (Paso 3), cuando etiquetas un issue
-> `ready-for-dev`, o de noche con el cron. Si alguna vez ves que empieza sola,
+> pone a programar cuando TÚ la sueltas (Paso 3) o cuando etiquetas un issue
+> `ready-for-dev`. Si alguna vez ves que empieza sola,
 > es un bug del plugin: la regla está en `.factory/rules/fabrica.md`, sección
 > _Autonomy boundary_.
 
@@ -248,18 +245,14 @@ PLANEAR → APROBAR → SOLTAR LA FÁBRICA → MERGEAR → REPETIR
 
 ## Parte 4: La fábrica sin tu computador (nube y celular) ☁️📱
 
-Con las dos llaves configuradas (Parte 2, comando 3), la fábrica también corre en
-los servidores de GitHub, y tu PC puede estar apagado. Tienes tres gatillos:
+Con tu llave configurada (Parte 2, comando 3), la fábrica también corre en
+los servidores de GitHub, y tu PC puede estar apagado. Tienes dos gatillos:
 
 1. **Etiqueta `ready-for-dev`:** pónsela a un issue (desde la app de GitHub
-   del celular si quieres) → GitHub arranca una máquina y lo procesa. No se
-   la pongas a una issue que todavía espera a otra (`blocked-by-N`): por
-   ahora la nube no revisa esos bloqueos antes de empezar.
-2. **El turno nocturno:** cada noche, el workflow procesa automáticamente
-   hasta 5 tareas elegibles del backlog. Combinado con `auto-merge`, una
-   cadena entera puede avanzar mientras duermes; los PRs sin etiqueta te
-   esperan para el desayuno.
-3. **Menciones `@claude`:** comenta `@claude ...` en cualquier issue y te
+   del celular si quieres) → GitHub arranca una máquina y procesa ese issue,
+   uno por corrida. Si el issue todavía espera a otro (`blocked-by-N`) o
+   está asignado a otra persona, la nube no lo toma y lo dice en el issue.
+2. **Menciones `@claude`:** comenta `@claude ...` en cualquier issue y te
    responde en el mismo hilo. Sirve para preguntas y para pedir un cambio
    puntual. Para planear no: la spec, el plan, las tareas y las issues de una
    feature se hacen en una sesión de Claude contigo delante (Parte 3).
@@ -451,17 +444,16 @@ seguir". Si no la agregas, funcionará a veces; si la agregas, siempre.
 La fábrica soporta varias personas en el mismo repo. Lo que ya hace sola, y
 lo que le toca configurar al equipo:
 
-**Automático: el reclamo por assignee.** Cuando alguien (o el turno
-nocturno) toma un ticket, se lo asigna en GitHub y verifica que nadie más lo
+**Automático: el reclamo por assignee.** Cuando alguien toma un ticket, se lo asigna en GitHub y verifica que nadie más lo
 haya reclamado; si otro llegó primero, lo salta. Dos personas corriendo el
-script a la vez no duplican trabajo. El cron nocturno también respeta los
-reclamos: nunca toca un issue con assignee.
+script a la vez no duplican trabajo. La nube también respeta los reclamos:
+no toma un issue asignado a otra persona.
 
 **Repartir por asignación (la forma más simple).** Asigna los tickets a
 cada persona desde GitHub (o pídelo en el gate: "asigna el 2 y el 4 a
 ana-lopez"). El script respeta las asignaciones solo con eso: los tickets de
 otros son invisibles, los tuyos y los libres se procesan. Los tickets **sin
-asignar son pozo común**: cualquiera (incluido el cron) los toma. Si
+asignar son pozo común**: cualquiera los toma. Si
 quieres el modo estricto que ignora el pozo, pídelo al soltar la fábrica:
 
 ```
@@ -471,8 +463,8 @@ quieres el modo estricto que ignora el pozo, pídelo al soltar la fábrica:
 (por dentro corre `fabrica-backlog` con `ONLY_MINE=1`)
 
 > Regla mental del sistema: **asignar = reservar**. Un ticket asignado solo
-> lo trabaja su dueño, y lo respetan los compañeros, el cron nocturno y el
-> reclamo automático. Lo sin asignar es de quien lo tome primero.
+> lo trabaja su dueño, y lo respetan los compañeros, la nube y el reclamo
+> automático. Lo sin asignar es de quien lo tome primero.
 
 **Carriles con `ONLY_LABEL`.** Para repartir el trabajo por áreas en vez de
 competir por la misma cola: creen labels de área (`gh label create
@@ -516,11 +508,6 @@ probados contra mains distintos se mergeen y rompan main entre los dos.
      responde en el issue con las instrucciones exactas para que esa persona
      se plante su token. Nadie trabaja con la cuenta de otro.
 
-  El **token común del repo** (`CLAUDE_CODE_OAUTH_TOKEN`) es exclusivo del
-  **cron nocturno**: el turno de noche no tiene "actor real" a quién
-  cobrarle, así que cobra a esa bolsa designada (o a la API key de equipo
-  si no existe).
-
 - **Letra pequeña de confianza:** los workflows de backlog y menciones
   reciben todos los secretos del repo (`secrets: inherit`), para poder
   buscar el token de cada persona por nombre. Cualquiera con permiso de push
@@ -529,8 +516,7 @@ probados contra mains distintos se mergeen y rompan main entre los dos.
   (cambios a workflows entran por PR revisado) y den permiso de push solo a
   gente de confianza.
 
-**Reglas de convivencia:** un solo dueño del cron nocturno (los demás no
-necesitan tocarlo); el label `auto-merge` es una decisión de confianza
+**Reglas de convivencia:** el label `auto-merge` es una decisión de confianza
 COMPARTIDA: acuerden en equipo qué tipo de tickets lo merecen, porque
 cualquiera puede etiquetar código que tocan todos; y cada persona registra el
 marketplace en su máquina (Parte 1), instala el plugin en el proyecto
@@ -586,8 +572,7 @@ claude setup-token                        # token de la nube
 gh repo create mi-app --private --clone && cd mi-app
 claude plugin install fabrica@fabrica-local --scope project
 claude "/fabrica:bootstrap descripción de la app y stack"
-gh secret set CLAUDE_CODE_OAUTH_TOKEN     # bolsa del cron (pegar token guardado)
-gh secret set CLAUDE_TOKEN_TU_USUARIO     # tu token personal (mismo valor)
+gh secret set CLAUDE_TOKEN_TU_USUARIO     # tu token personal (pegar token guardado)
 
 # Nueva funcionalidad (dentro de claude)
 /fabrica:spec lo que quiero construir      # crea la épica (con tu OK), la spec y el PR

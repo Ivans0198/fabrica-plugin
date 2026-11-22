@@ -2,23 +2,32 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { load } from "js-yaml";
 import { describe, expect, it } from "vitest";
-import { REPO_ROOT } from "../../support/plugin-paths";
+import { REPO_ROOT, TEMPLATES_ROOT } from "../../support/plugin-paths";
+
+/**
+ * La nube trabaja una issue por corrida, solo cuando una persona le pone
+ * `ready-for-dev`. No hay cron ni disparo a mano: un lote en una sola sesión
+ * dejaba al Stop gate revisando solo la última issue.
+ */
 
 const WORKFLOW_PATH = path.join(
   REPO_ROOT,
   ".github/workflows/claude-backlog.yml",
 );
+const CALLER_PATH = path.join(
+  TEMPLATES_ROOT,
+  ".github/workflows/claude-backlog.yml",
+);
 
 const GITHUB_JOB_HARD_CAP_MINUTES = 360;
-
-const LABEL_TRIGGER_MAX_TURNS = 200;
-const LABEL_TRIGGER_TIMEOUT_MINUTES = 120;
-const SCHEDULE_MAX_TURNS = 1000;
-const SCHEDULE_TIMEOUT_MINUTES = 350;
+const MAX_TURNS = 200;
+const TIMEOUT_MINUTES = 120;
 
 interface WorkflowFile {
+  on: Record<string, unknown>;
   jobs: {
     implement: {
+      if?: string;
       "timeout-minutes": number | string;
       steps: Array<{
         name?: string;
@@ -28,12 +37,8 @@ interface WorkflowFile {
   };
 }
 
-function readWorkflowSource(): string {
-  return readFileSync(WORKFLOW_PATH, "utf8");
-}
-
-function parseWorkflow(): WorkflowFile {
-  return load(readWorkflowSource()) as WorkflowFile;
+function parse(file: string): WorkflowFile {
+  return load(readFileSync(file, "utf8")) as WorkflowFile;
 }
 
 function findClaudeArgs(workflow: WorkflowFile): string {
@@ -46,81 +51,39 @@ function findClaudeArgs(workflow: WorkflowFile): string {
   return step.with.claude_args;
 }
 
-function extractMaxTurnsExpression(claudeArgs: string): string {
-  const match = claudeArgs.match(/--max-turns\s+(\$\{\{[^}]*\}\})/);
-  const expression = match?.[1];
-  if (!expression) {
-    throw new Error(`no se encontró --max-turns en: ${claudeArgs}`);
-  }
-  return expression;
-}
-
-/**
- * Las expresiones de GitHub Actions (`${{ cond && a || b }}`) no las evalúa
- * js-yaml: para el parser son un escalar de texto más. Extraemos las dos
- * ramas numéricas a mano para confirmar que ninguna quedó vacía, que es el
- * modo de fallo real de un ternario mal armado (criterio "se resuelven a
- * números, no a cadenas vacías").
- */
-function extractTernaryBranches(expression: string): {
-  whenTrue: string;
-  whenFalse: string;
-} {
-  const match = expression.match(/&&\s*(\S+)\s*\|\|\s*(\S+)\s*}}/);
-  const whenTrue = match?.[1];
-  const whenFalse = match?.[2];
-  if (!whenTrue || !whenFalse) {
-    throw new Error(`no se encontró un ternario en: ${expression}`);
-  }
-  return { whenTrue, whenFalse };
-}
-
 describe("claude-backlog.yml", () => {
-  it("parsea como YAML válido", () => {
-    expect(() => parseWorkflow()).not.toThrow();
+  it("la llamada del proyecto solo se dispara cuando una issue recibe una etiqueta", () => {
+    const on = (load(readFileSync(CALLER_PATH, "utf8")) as WorkflowFile).on;
+
+    expect(Object.keys(on)).toEqual(["issues"]);
+    expect(on.issues).toEqual({ types: ["labeled"] });
   });
 
-  it("usa 200 turnos y 120 minutos en el disparo por etiqueta", () => {
-    const workflow = parseWorkflow();
-    const claudeArgs = findClaudeArgs(workflow);
+  it("el job corre solo con la etiqueta ready-for-dev, aunque una llamada vieja traiga el cron", () => {
+    const condition = parse(WORKFLOW_PATH).jobs.implement.if ?? "";
 
-    const { whenFalse: maxTurnsOnLabel } = extractTernaryBranches(
-      extractMaxTurnsExpression(claudeArgs),
-    );
-    expect(Number(maxTurnsOnLabel)).toBe(LABEL_TRIGGER_MAX_TURNS);
-
-    const timeoutExpression = String(
-      workflow.jobs.implement["timeout-minutes"],
-    );
-    const { whenFalse: timeoutOnLabel } =
-      extractTernaryBranches(timeoutExpression);
-    expect(Number(timeoutOnLabel)).toBe(LABEL_TRIGGER_TIMEOUT_MINUTES);
+    expect(condition).toContain("github.event_name == 'issues'");
+    expect(condition).toContain("github.event.label.name == 'ready-for-dev'");
+    expect(condition).not.toContain("!=");
   });
 
-  it("usa 1000 turnos y 350 minutos en el disparo por schedule", () => {
-    const workflow = parseWorkflow();
-    const claudeArgs = findClaudeArgs(workflow);
+  it(`usa ${MAX_TURNS} turnos y ${TIMEOUT_MINUTES} minutos, por debajo del tope de 6 horas de GitHub`, () => {
+    const workflow = parse(WORKFLOW_PATH);
 
-    const { whenTrue: maxTurnsOnSchedule } = extractTernaryBranches(
-      extractMaxTurnsExpression(claudeArgs),
+    expect(findClaudeArgs(workflow)).toMatch(
+      new RegExp(`--max-turns ${MAX_TURNS}\\b`),
     );
-    expect(Number(maxTurnsOnSchedule)).toBe(SCHEDULE_MAX_TURNS);
-
-    const timeoutExpression = String(
-      workflow.jobs.implement["timeout-minutes"],
-    );
-    const { whenTrue: timeoutOnSchedule } =
-      extractTernaryBranches(timeoutExpression);
-    expect(Number(timeoutOnSchedule)).toBe(SCHEDULE_TIMEOUT_MINUTES);
+    expect(workflow.jobs.implement["timeout-minutes"]).toBe(TIMEOUT_MINUTES);
+    expect(TIMEOUT_MINUTES).toBeLessThan(GITHUB_JOB_HARD_CAP_MINUTES);
   });
 
-  it("mantiene el timeout del cron por debajo del tope de 6 horas de GitHub", () => {
-    const timeoutExpression = String(
-      parseWorkflow().jobs.implement["timeout-minutes"],
-    );
-    const { whenTrue, whenFalse } = extractTernaryBranches(timeoutExpression);
+  it("no queda nada del cron: ni schedule, ni lote, ni su credencial", () => {
+    for (const file of [WORKFLOW_PATH, CALLER_PATH]) {
+      const source = readFileSync(file, "utf8");
 
-    expect(Number(whenTrue)).toBeLessThan(GITHUB_JOB_HARD_CAP_MINUTES);
-    expect(Number(whenFalse)).toBeLessThan(GITHUB_JOB_HARD_CAP_MINUTES);
+      expect(source, file).not.toMatch(/schedule|cron|workflow_dispatch/i);
+      expect(source, file).not.toContain("CLAUDE_CODE_OAUTH_TOKEN");
+      expect(source, file).not.toContain("fabrica-worker-prompt batch");
+    }
   });
 });
