@@ -156,6 +156,26 @@ describe("comandos de la cola", () => {
     TIMEOUT,
   );
 
+  // La nube y el local actúan como la misma persona, así que el reclamo por
+  // assignee no los separa: el local tomó la issue que era de la nube
+  // (fabrica-prueba #25, 2026-11-22). ready-for-dev es el carril de la nube.
+  it(
+    "fabrica-next-issue se salta las issues con ready-for-dev, que son de la nube",
+    async () => {
+      const { repo, env } = await project();
+
+      const { code, stdout } = await run(["next"], repo, {
+        ...env,
+        FAKE_PENDING: "3 4",
+        FAKE_LABELS_3: "pending ready-for-dev",
+      });
+
+      expect(code).toBe(0);
+      expect(stdout.trim()).toBe("4");
+    },
+    TIMEOUT,
+  );
+
   it(
     "fabrica-next-issue sale con 1 si no hay ninguna elegible",
     async () => {

@@ -148,8 +148,17 @@ is_blocked() {  # issue number -> 0 if blocked
   return 1
 }
 
+# ready-for-dev es el carril de la nube: la persona se la pone a una issue
+# para que la trabaje la nube. La nube y el local actúan como la misma
+# persona, así que el reclamo por assignee no los separa, y el local llegó a
+# tomar la issue de la nube. Para dársela al local, se quita la etiqueta.
+is_cloud_lane() {  # issue number -> 0 if it belongs to the cloud
+  gh issue view "$1" --json labels -q '.labels[].name' | grep -qx 'ready-for-dev'
+}
+
 next_issue() {  # -> first eligible pending issue number, or empty
-  # Skips issues already assigned to someone else (their claim is respected).
+  # Skips issues already assigned to someone else (their claim is respected)
+  # and the ones in the cloud's lane.
   local lane=()
   [ -n "$ONLY_LABEL" ] && lane=(--label "$ONLY_LABEL")
   for prio in "priority:high" "priority:medium" "priority:low" ""; do
@@ -161,6 +170,7 @@ next_issue() {  # -> first eligible pending issue number, or empty
                  --json number,assignees \
                  --jq "$jqsel" \
                | sort -n); do
+      is_cloud_lane "$n" && continue
       if ! is_blocked "$n"; then echo "$n"; return; fi
     done
   done

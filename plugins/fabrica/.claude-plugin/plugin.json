@@ -1,6 +1,6 @@
 {
   "name": "fabrica",
-  "version": "0.3.5",
+  "version": "0.3.6",
   "description": "La fábrica: cola de issues, Stop gate, revisores y workers para Claude Code.",
   "repository": "https://github.com/Ivans0198/fabrica-plugin"
 }
