@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Escribe el dev container con firewall para correr los workers con bypass. Uso: fabrica-devcontainer [--feature <id>]... [--domain <dominio>]... [--force]
+exec bash "$(dirname "$(readlink -f "$0")")/../scripts/devcontainer.sh" "$@"

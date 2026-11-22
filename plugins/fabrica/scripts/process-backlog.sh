@@ -5,9 +5,10 @@
 #
 # Requirements: gh (authenticated), claude, jq. Run from the repo root, as
 # `fabrica-backlog` (the /fabrica:backlog skill does it).
-# Safety: run this inside the devcontainer (see .devcontainer/) if you want
-# to use full-bypass permissions; with --permission-mode auto it is safe to
-# run on your machine but may occasionally pause on a dangerous action.
+# Safety: full-bypass permissions (PERMISSION_MODE=bypassPermissions) only
+# run inside a container, such as the one fabrica-devcontainer writes; with
+# the default auto mode it is safe to run on your machine but may
+# occasionally pause on a dangerous action.
 
 set -euo pipefail
 
@@ -28,6 +29,15 @@ MAX_ISSUES="${MAX_ISSUES:-10}"
 # alcanza ni a commitear lo que ya tenía verde, y el ticket se pierde entero.
 MAX_TURNS="${MAX_TURNS:-200}"
 PERMISSION_MODE="${PERMISSION_MODE:-auto}"   # auto | bypassPermissions (container only!)
+# Sin preguntar nada, un worker puede borrar o mandar a la red lo que sea: eso
+# solo vale en un contenedor desechable (fabrica-devcontainer escribe uno con
+# firewall). Lo detecta por los archivos que dejan Docker y Podman, o por la
+# variable que pone el Dockerfile de la fábrica.
+if [ "$PERMISSION_MODE" = bypassPermissions ] \
+  && [ ! -f /.dockerenv ] && [ ! -f /run/.containerenv ] && [ "${DEVCONTAINER:-}" != true ]; then
+  echo "❌ PERMISSION_MODE=bypassPermissions solo corre dentro de un contenedor. Ábrelo con el de fabrica-devcontainer, o usa PERMISSION_MODE=auto" >&2
+  exit 1
+fi
 # shellcheck source=lib/factory-config.sh
 source "$SCRIPT_DIR/lib/factory-config.sh"
 WORKER_MODEL="${WORKER_MODEL:-$(factory_read_model worker sonnet)}"

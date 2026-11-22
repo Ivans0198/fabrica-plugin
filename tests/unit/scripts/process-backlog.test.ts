@@ -2023,3 +2023,42 @@ exit 0
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
 });
+
+describe("bypassPermissions solo en un contenedor", () => {
+  // Sin preguntar nada, un worker puede borrar o mandar a la red lo que sea.
+  // Eso solo es aceptable en un contenedor desechable con el firewall arriba.
+  let workDir = "";
+
+  afterEach(async () => {
+    if (workDir) {
+      await rm(workDir, REMOVE_TEMP_DIR_OPTIONS);
+      workDir = "";
+    }
+  });
+
+  it(
+    "fabrica-backlog se niega a correr con bypassPermissions fuera de un contenedor",
+    async () => {
+      workDir = await setupWorkDir();
+      const { binDir } = await installFakeGh(workDir);
+      const claude = await installFakeClaude(workDir);
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${claude.binDir}${path.delimiter}${process.env.PATH}`,
+        PERMISSION_MODE: "bypassPermissions",
+      };
+      delete env.DEVCONTAINER;
+
+      const { code, stderr } = await runBash(
+        "bash scripts/process-backlog.sh",
+        workDir,
+        env,
+      );
+
+      expect(code).not.toBe(0);
+      expect(stderr).toMatch(/contenedor/);
+      expect(await readLog(claude.logFile)).toBe("");
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+});
