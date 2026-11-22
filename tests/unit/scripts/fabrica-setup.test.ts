@@ -1045,3 +1045,126 @@ describe("fabrica-setup init en un proyecto de la plantilla", () => {
     TIMEOUT,
   );
 });
+
+// Los commits no mencionan a Claude ni a Anthropic, tampoco los de los
+// workers. Claude Code agrega Co-Authored-By y, en la web, Claude-Session si
+// el settings.json del proyecto no los apaga.
+describe("fabrica-setup y la atribución de los commits", () => {
+  const SIN_ATRIBUCION = { commit: "", sessionUrl: false };
+  const attributionOf = (dir: string): unknown =>
+    (
+      JSON.parse(read(dir, ".claude/settings.json")) as {
+        attribution?: unknown;
+      }
+    ).attribution;
+
+  it(
+    "init en un repo vacío la deja apagada",
+    () => {
+      const dir = gitRepo();
+
+      setup(dir, ["init"]);
+
+      expect(attributionOf(dir)).toEqual(SIN_ATRIBUCION);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "init la apaga en un settings.json que ya existía",
+    () => {
+      const dir = gitRepo();
+      writeSettings(dir, { enabledPlugins: { "fabrica@fabrica-local": true } });
+
+      setup(dir, ["init"]);
+
+      expect(attributionOf(dir)).toEqual(SIN_ATRIBUCION);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "init la apaga al migrar un proyecto de fabrica-template",
+    () => {
+      const dir = templateProject();
+
+      const { code, out } = setup(dir, ["init"]);
+
+      expect(code, out).toBe(0);
+      expect(attributionOf(dir)).toEqual(SIN_ATRIBUCION);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "refresh la apaga en un proyecto que ya existía, avisa y no le devuelve los permisos que quitó",
+    () => {
+      const dir = gitRepo();
+      setup(dir, ["init"]);
+      const before = {
+        enabledPlugins: { "fabrica@fabrica-local": true },
+        permissions: { allow: ["Bash(make:*)"], deny: [] },
+      };
+      writeSettings(dir, before);
+
+      const { code, out } = setup(dir, ["refresh"]);
+
+      expect(code, out).toBe(0);
+      expect(JSON.parse(read(dir, ".claude/settings.json"))).toEqual({
+        ...before,
+        attribution: SIN_ATRIBUCION,
+      });
+      expect(out).toMatch(/\.claude\/settings\.json.*Claude/);
+    },
+    TIMEOUT,
+  );
+
+  it.each([
+    ["un texto propio", { commit: "Equipo X", sessionUrl: true }],
+    ["todo apagado", false],
+    ["todo prendido", true],
+  ])(
+    "refresh respeta lo que el proyecto eligió (%s)",
+    (_caso, attribution) => {
+      const dir = gitRepo();
+      setup(dir, ["init"]);
+      writeSettings(dir, { attribution });
+
+      const { code, out } = setup(dir, ["refresh"]);
+
+      expect(code, out).toBe(0);
+      expect(attributionOf(dir)).toEqual(attribution);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "refresh completa solo lo que falta",
+    () => {
+      const dir = gitRepo();
+      setup(dir, ["init"]);
+      writeSettings(dir, { attribution: { pr: "" } });
+
+      setup(dir, ["refresh"]);
+
+      expect(attributionOf(dir)).toEqual({ pr: "", ...SIN_ATRIBUCION });
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "refresh para antes de actualizar nada si settings.json no es JSON",
+    () => {
+      const dir = gitRepo();
+      setup(dir, ["init"]);
+      writeFileSync(path.join(dir, ".claude/settings.json"), "{ no es json\n");
+
+      const { code, out } = setup(dir, ["refresh"], newerPlugin("9.9.9", ""));
+
+      expect(code).not.toBe(0);
+      expect(out).toContain(".claude/settings.json");
+      expect(read(dir, ".factory/version").trim()).toBe(PLUGIN_VERSION);
+    },
+    TIMEOUT,
+  );
+});

@@ -4,6 +4,7 @@
 #   fabrica-setup init     primera vez: archivos del proyecto y copias administradas
 #   fabrica-setup check    ¿el proyecto está en la versión del plugin? (lo corren los workers)
 #   fabrica-setup refresh  actualiza las copias administradas a la versión del plugin
+#                          y apaga la atribución de los commits en settings.json
 #   fabrica-setup speckit  arma .specify/ (Spec Kit y la constitución) en esta máquina
 #
 # Las copias administradas (.factory/rules/ y las llamadas a los workflows del
@@ -196,9 +197,22 @@ seed_settings() {
   result=$(node "$SCRIPT_DIR/lib/merge-settings.mjs" "$file" "$template") \
     || die "No toqué nada. Arregla $file y vuelve a correr fabrica-setup init."
   if [ "$result" = changed ]; then
-    echo "  ✎ $file: con los permisos de la fábrica"
+    echo "  ✎ $file: con los permisos de la fábrica y los commits sin mención a Claude"
   else
     echo "  = $file (ya tenía los permisos de la fábrica)"
+  fi
+}
+
+# En refresh, de settings.json solo se toca la atribución de los commits.
+refresh_attribution() {
+  local file=.claude/settings.json result
+  [ -f "$file" ] || return 0
+  command -v node > /dev/null 2>&1 \
+    || die "Hace falta node para revisar la atribución de los commits en $file. Instala node y vuelve a correr fabrica-setup refresh."
+  result=$(node "$SCRIPT_DIR/lib/merge-settings.mjs" "$file" "$TEMPLATES/.claude/settings.json" --attribution-only) \
+    || die "No actualicé nada. Arregla $file y vuelve a correr fabrica-setup refresh."
+  if [ "$result" = changed ]; then
+    echo "  ✎ $file: los commits ya no mencionan a Claude. Commitéalo: los workers lo leen del último commit."
   fi
 }
 
@@ -375,6 +389,8 @@ cmd_refresh() {
   local version
   version=$(plugin_version)
   echo "fabrica $(project_version) → $version"
+  # Primero, porque puede fallar, y así falla antes de escribir lo demás.
+  refresh_attribution
   ensure_gitignore
   sync_managed "$version"
 }

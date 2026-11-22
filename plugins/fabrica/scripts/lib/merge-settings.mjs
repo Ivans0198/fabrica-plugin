@@ -1,9 +1,11 @@
-// Suma a un .claude/settings.json que ya existe los permisos de la fábrica que
-// le falten, sin quitar ni cambiar nada más. `fabrica-setup init` lo llama
-// cuando el archivo ya está, por ejemplo porque `claude plugin install
-// --scope project` lo creó solo con enabledPlugins.
+// Suma a un .claude/settings.json que ya existe lo de la fábrica que le falte
+// (los permisos y la atribución apagada de los commits), sin quitar ni cambiar
+// nada más. `fabrica-setup init` lo llama cuando el archivo ya está, por
+// ejemplo porque `claude plugin install --scope project` lo creó solo con
+// enabledPlugins. `fabrica-setup refresh` suma solo la atribución: los
+// permisos que el proyecto quitó no vuelven.
 //
-//   node merge-settings.mjs <settings.json del proyecto> <settings.json del plugin>
+//   node merge-settings.mjs <settings.json del proyecto> <settings.json del plugin> [--attribution-only]
 //
 // Imprime "changed" si reescribió el archivo y "same" si ya tenía todo. Si el
 // archivo no es JSON o sus permisos no son listas, no escribe nada y sale con 1.
@@ -40,6 +42,18 @@ export function mergePermissions(old, template, file = "settings.json") {
   return next;
 }
 
+// Las claves de attribution que falten. Si el proyecto puso true, false o un
+// texto propio, se queda con lo suyo.
+export function mergeAttribution(old, template) {
+  const own = old.attribution ?? {};
+  if (typeof own !== "object" || Array.isArray(own)) return old;
+  return { ...old, attribution: { ...template.attribution, ...own } };
+}
+
+export function mergeSettings(old, template, file) {
+  return mergeAttribution(mergePermissions(old, template, file), template);
+}
+
 function readJson(file) {
   const text = readFileSync(file, "utf8").replace(/^﻿/, "");
   let value;
@@ -54,9 +68,13 @@ function readJson(file) {
   return value;
 }
 
-function main([projectFile, templateFile]) {
+function main([projectFile, templateFile, only]) {
   const old = readJson(projectFile);
-  const next = mergePermissions(old, readJson(templateFile), projectFile);
+  const template = readJson(templateFile);
+  const next =
+    only === "--attribution-only"
+      ? mergeAttribution(old, template)
+      : mergeSettings(old, template, projectFile);
   if (JSON.stringify(old) === JSON.stringify(next)) {
     console.log("same");
     return;
@@ -65,7 +83,7 @@ function main([projectFile, templateFile]) {
   console.log("changed");
 }
 
-// Solo corre como comando; migrate-template.mjs lo importa por mergePermissions.
+// Solo corre como comando; migrate-template.mjs lo importa por mergeSettings.
 if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)

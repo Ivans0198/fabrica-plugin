@@ -555,7 +555,8 @@ Claude _"corre fabrica-setup init"_. Reconoce la plantilla y la migra:
 - deja lo tuyo: `factory.json`, tus scripts, tus skills, tus tests, tus
   workflows propios;
 - deja en `CLAUDE.md` la parte de tu proyecto e importa las reglas del plugin;
-- quita de `.claude/settings.json` los hooks viejos y suma los permisos.
+- quita de `.claude/settings.json` los hooks viejos, suma los permisos y
+  apaga la mención a Claude en los commits (`attribution`).
 
 Revisa el resultado con `git status` y `git diff` y commitea todo junto: si
 el plugin queda activo con los hooks viejos todavía puestos, corren dos
