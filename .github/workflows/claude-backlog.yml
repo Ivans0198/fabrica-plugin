@@ -39,9 +39,14 @@ jobs:
       checks: read
       statuses: read
     steps:
+      # Sin la credencial del workflow: checkout v7 la guarda con
+      # includeIf.gitdir y claude-code-action no la quita, así que git
+      # empujaba con github.token y esos pushes no corren los checks
+      # (quedan en action_required). Sin ella, git usa la de la App.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Trae el plugin fabrica
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

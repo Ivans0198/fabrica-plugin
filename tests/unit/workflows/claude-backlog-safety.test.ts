@@ -175,6 +175,29 @@ describe("la credencial en un re-run", () => {
   );
 });
 
+// actions/checkout v7 guarda su credencial con includeIf.gitdir, y
+// claude-code-action solo la quita de include.path: git empujaba con
+// github.token, y esos pushes quedan en action_required sin correr los checks
+// (fabrica-prueba #39, 2026-11-23). Sin credencial guardada, git usa la de la
+// App que configura la action.
+describe("el checkout del proyecto en la nube", () => {
+  it.each(["claude-backlog.yml", "claude-mentions.yml"])(
+    "%s no guarda la credencial del workflow",
+    (file) => {
+      const wf = load(
+        readFileSync(path.join(REPO_ROOT, ".github/workflows", file), "utf8"),
+      ) as { jobs: Record<string, { steps: Step[] }> };
+      const checkout = Object.values(wf.jobs)
+        .flatMap((job) => job.steps)
+        .find(
+          (s) => s.uses?.startsWith("actions/checkout") && !s.with?.repository,
+        );
+
+      expect(checkout?.with?.["persist-credentials"]).toBe(false);
+    },
+  );
+});
+
 describe("claude-backlog.yml antes del agente", () => {
   const gateIndex = steps.findIndex((s) => s.id === "gate");
 
