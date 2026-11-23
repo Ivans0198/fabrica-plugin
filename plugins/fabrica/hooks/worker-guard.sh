@@ -24,7 +24,10 @@ cwd=$(printf '%s' "$input" | jq -r '.cwd // empty')
 
 # shellcheck source=../scripts/lib/factory-config.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../scripts/lib/factory-config.sh"
-base=$(factory_read_value baseBranch 2>/dev/null)
+# La base la fija el orquestador en FABRICA_BASE; el factory.json del árbol lo
+# puede editar el agente. main y master quedan cerradas siempre.
+factory_use_base_config
+base="${FABRICA_BASE:-$(factory_read_value baseBranch 2>/dev/null)}"
 base="${base:-main}"
 
 # Lo que va entre comillas es texto (un mensaje, un echo), no un comando.
@@ -57,7 +60,9 @@ while IFS= read -r segment; do
     esac
     dest="${w##*:}"
     dest="${dest#refs/heads/}"
-    [ "$dest" = "$base" ] && block "empujar a la rama base ($base)"
+    case "$dest" in
+      "$base" | main | master) block "empujar a la rama base ($dest)" ;;
+    esac
   done
 done <<<"$(printf '%s\n' "$bare" | sed -E 's/(\&\&|\|\||;|\||&)/\n/g')"
 exit 0

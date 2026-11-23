@@ -13,6 +13,8 @@ set -o pipefail
 # shellcheck source=lib/factory-config.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib/factory-config.sh"
 
+factory_use_base_config
+
 readonly CONFIG_ERROR_EXIT=4
 NAME="${1:?uso: factory-cmd.sh <install|lint|typecheck|test|build|e2e>}"
 

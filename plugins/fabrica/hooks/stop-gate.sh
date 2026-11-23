@@ -43,6 +43,7 @@ fi
 if [ -n "$ROOT" ]; then
   cd "$ROOT" || { echo "❌ Stop gate: no pude entrar a $ROOT" >&2; exit 2; }
 fi
+factory_use_base_config
 
 # Anti-infinite-loop guard: after MAX_GATE_RUNS blocked attempts, let Claude
 # stop so it can label the issue needs-human instead of looping forever. The
@@ -100,6 +101,11 @@ if [[ "$(git branch --show-current 2>/dev/null)" =~ ^impl-[0-9]+$ ]]; then
     fail "❌ An issue branch must not change the approved spec. Changed under specs/:
 $spec_changes
 Revert those changes (git checkout origin/<base> -- <file>, then commit). If the work really needs a different spec, stop and release the issue with fabrica-release N --needs-human \"<what the spec is missing>\"."
+  fi
+  # factory.json says which commands the hooks run, outside the permission
+  # system: changing it is a human's call, like the spec.
+  if changed_since_base | grep -qx 'factory.json'; then
+    fail "❌ An issue branch must not change factory.json: it decides which commands the hooks run. Revert it (git checkout origin/<base> -- factory.json, then commit). If the ticket really needs another command, stop and release the issue with fabrica-release N --needs-human \"<what factory.json needs>\"."
   fi
 fi
 

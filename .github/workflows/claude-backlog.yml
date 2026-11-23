@@ -93,6 +93,11 @@ jobs:
         run: |
           source "$FABRICA/scripts/lib/factory-config.sh"
           echo "FACTORY_MODEL=$(factory_read_model worker sonnet)" >> "$GITHUB_ENV"
+          # La base de la que el agente lee factory.json (lib/factory-config.sh),
+          # leída antes de que el agente toque nada.
+          base=$(factory_read_value baseBranch 2>/dev/null)
+          [[ "${base:-main}" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "baseBranch inválida en factory.json" >&2; exit 1; }
+          echo "FABRICA_BASE=${base:-main}" >> "$GITHUB_ENV"
 
       # El mismo archivo que lee el worker local, para que la nube y la
       # máquina no se separen.

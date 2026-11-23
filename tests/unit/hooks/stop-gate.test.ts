@@ -7,6 +7,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -14,6 +15,7 @@ import { pluginFile } from "../../support/plugin-paths";
 
 const STOP_GATE_SCRIPT = pluginFile(".claude/hooks/stop-gate.sh");
 const SESSION_START_SCRIPT = pluginFile(".claude/hooks/session-start.sh");
+const FORMAT_HOOK_SCRIPT = pluginFile(".claude/hooks/post-edit-lint.sh");
 
 /**
  * Estos tests lanzan bash y git de verdad, no los imitan. Bajo `npm test`
@@ -834,6 +836,78 @@ describe("guard de árbol limpio", () => {
       expect(stderr).toContain("specs/12-favoritos/tasks.md");
       expect(stderr).toMatch(/needs-human/);
       expect(await checksRan(markerFile)).toBe(false);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // Los hooks corren los comandos de factory.json sin pasar por los permisos:
+  // un worker que lo editara correría lo que quisiera (revisión del
+  // 2026-11-23). Cambiarlo es de una persona, como la spec.
+  it(
+    "en una rama impl-N bloquea un cambio en factory.json, sin correr los checks",
+    async () => {
+      ({ workDir, originDir } = await createFixtureRepo());
+      await runBashScript(
+        workDir,
+        `set -e
+         git checkout -q -b impl-7
+         echo '{"stack":"node-ts","commands":{"install":null,"lint":null,"typecheck":null,"test":null,"build":null,"e2e":null},"format":[]}' > factory.json
+         git commit -qam apaga`,
+      );
+      const { binDir, markerFile } = await installChecksRanMarkerBin();
+      stubBinDir = binDir;
+
+      const { code, stderr } = await runStopGate(workDir, {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      });
+
+      expect(code).toBe(2);
+      expect(stderr).toContain("factory.json");
+      expect(await checksRan(markerFile)).toBe(false);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it.each([
+    ["el Stop gate", "stop"],
+    ["el hook de formato", "format"],
+  ])(
+    "en un worker, %s usa el factory.json de la rama base, no el del árbol",
+    async (_caso, hook) => {
+      ({ workDir, originDir } = await createFixtureRepo());
+      const evil = toBashPath(
+        path.join(workDir, "..", `${path.basename(workDir)}-evil`),
+      );
+      await runBashScript(
+        workDir,
+        `set -e
+         git checkout -q -b otra
+         node -e 'const f=JSON.parse(require("fs").readFileSync("factory.json","utf8")); f.commands.lint=["bash","-c","touch ${evil}"]; f.format=[{"extensions":["ts"],"cmd":["bash","-c","touch ${evil}"]}]; require("fs").writeFileSync("factory.json", JSON.stringify(f))'`,
+      );
+      const { binDir, markerFile } = await installChecksRanMarkerBin();
+      stubBinDir = binDir;
+      const env = {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+        FABRICA_WORKER: "1",
+      };
+
+      if (hook === "stop") {
+        await runStopGate(workDir, env);
+        expect(await checksRan(markerFile)).toBe(true);
+      } else {
+        const result = await runBashScript(
+          workDir,
+          `FABRICA_WORKER=1 bash "${toBashPath(FORMAT_HOOK_SCRIPT)}"`,
+          JSON.stringify({
+            tool_input: { file_path: path.join(workDir, "src/lib/foo.ts") },
+          }),
+        );
+        expect(result.code).toBe(0);
+      }
+      expect(existsSync(evil.replace(/\//g, path.sep))).toBe(false);
+      await rm(evil, { force: true });
     },
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );

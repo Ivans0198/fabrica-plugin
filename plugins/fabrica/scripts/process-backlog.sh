@@ -275,6 +275,8 @@ run_worker() {
     export CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
     # hooks/worker-guard.sh: un worker no mergea ni empuja a la rama base.
     export FABRICA_WORKER=1
+    # La base de la que se lee factory.json (lib/factory-config.sh).
+    export FABRICA_BASE="$(base_branch)"
     exec claude -p "$(bash "$SCRIPT_DIR/worker-prompt.sh" one "$n")" \
       --permission-mode "$PERMISSION_MODE" \
       --max-turns "$MAX_TURNS" \

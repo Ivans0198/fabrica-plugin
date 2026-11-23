@@ -116,6 +116,19 @@ describe("guardia del worker", () => {
     TIMEOUT,
   );
 
+  // El factory.json del árbol lo puede editar el agente: cambiar baseBranch
+  // no le abre la rama base de verdad.
+  it(
+    "main y master quedan cerradas aunque factory.json diga otra base",
+    async () => {
+      const cwd = await project("develop");
+
+      expect((await guard(cwd, "git push origin HEAD:main")).code).toBe(2);
+      expect((await guard(cwd, "git push origin master")).code).toBe(2);
+    },
+    TIMEOUT,
+  );
+
   it(
     "fuera de un worker no bloquea nada: ahí pregunta Claude Code",
     async () => {
@@ -157,6 +170,7 @@ describe("quién es worker", () => {
     expect(script).toMatch(
       /export FABRICA_WORKER=1\n(.*\n){0,8}\s*exec claude -p/,
     );
+    expect(script).toMatch(/export FABRICA_BASE=/);
   });
 
   it("la nube lanza al agente con FABRICA_WORKER=1", () => {
@@ -166,5 +180,7 @@ describe("quién es worker", () => {
     );
 
     expect(workflow).toMatch(/FABRICA_WORKER: "1"/);
+    // De esa base lee factory.json el agente: se fija antes de que corra.
+    expect(workflow).toMatch(/echo "FABRICA_BASE=/);
   });
 });
