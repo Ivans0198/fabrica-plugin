@@ -85,7 +85,7 @@ case "$1 $2" in
   "issue edit") [ -n "\${FAKE_FAIL_EDIT:-}" ] && exit 1 ;;
 esac
 case "$1 $2" in
-  "api user") echo "\${FAKE_ME:-tester}" ;;
+  "api user") echo "\${FAKE_ME-tester}" ;;
   "issue list") for n in \${FAKE_PENDING:-}; do echo "$n"; done ;;
   "issue view")
     n="$3"; shift 3
@@ -257,6 +257,45 @@ describe("comandos de la cola", () => {
 
       expect(code).not.toBe(0);
       expect(await calls()).not.toMatch(/--add-label in-progress/);
+    },
+    TIMEOUT,
+  );
+
+  // En la nube, el token de la App no puede asignar ("Assigning agents is not
+  // supported with GitHub App installation tokens", fabrica-prueba #36,
+  // 2026-11-23), y no hace falta: fabrica-eligible ya se la asignó a quien
+  // puso la etiqueta.
+  it(
+    "en la nube, fabrica-claim no depende de poder asignarse la issue",
+    async () => {
+      const { repo, env } = await project();
+
+      const { code, stderr } = await run(["claim", "5"], repo, {
+        ...env,
+        GITHUB_ACTIONS: "true",
+        FAKE_FAIL_EDIT: "1",
+      });
+
+      expect(code, stderr).toBe(0);
+      expect(await calls()).not.toMatch(/issue edit 5 --add-assignee/);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "en la nube, fabrica-claim tampoco toma una issue en curso",
+    async () => {
+      const { repo, env } = await project();
+
+      const { code } = await run(["claim", "5"], repo, {
+        ...env,
+        GITHUB_ACTIONS: "true",
+        FAKE_LABELS_5: "in-progress",
+        // El token de la App no puede leer `gh api user`: ME queda vacío.
+        FAKE_ME: "",
+      });
+
+      expect(code).toBe(2);
     },
     TIMEOUT,
   );
