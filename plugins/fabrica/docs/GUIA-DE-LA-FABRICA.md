@@ -244,8 +244,11 @@ al contenedor; si lo abres de otra forma, configúrala dentro, o los commits
 de los workers no tendrán autor. Si cambias `allowed-domains.txt`, reconstruye el contenedor.
 
 `fabrica-backlog` solo acepta `bypassPermissions` si el firewall terminó bien
-(deja `/run/fabrica-firewall-ok`) y example.com no responde. Lo que el
-firewall no cubre:
+(deja `/run/fabrica-firewall-ok`) y example.com no responde. `refresh` no
+toca `.devcontainer/`: si el tuyo es de antes de la 0.5.0, su firewall no deja
+la marca, y `fabrica-setup check` lo avisa. Regenéralo con
+`fabrica-devcontainer --force` (con tus `--feature` y `--domain`) y
+reconstruye. Lo que el firewall no cubre:
 
 - **GitHub está abierto**, y la sesión de `gh` del contenedor llega a todos
   tus repos. Para un proyecto delicado, entra con un token fine-grained

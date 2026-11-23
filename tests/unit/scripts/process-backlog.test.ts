@@ -2224,6 +2224,9 @@ describe("bypassPermissions solo en un contenedor", () => {
 
       expect(code).not.toBe(0);
       expect(stderr).toMatch(/firewall/);
+      // Un .devcontainer/ de antes de la 0.5.0 nunca deja la marca: correr su
+      // firewall otra vez no sirve, hay que regenerarlo.
+      expect(stderr).toMatch(/fabrica-devcontainer --force/);
     },
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
