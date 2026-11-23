@@ -297,7 +297,8 @@ ensure_worker_worktree() {  # issue number
 # Reclama la issue por assignee y la vuelve a leer: si otra persona (un
 # compañero, la nube) ganó la carrera, suelta el reclamo.
 # Devuelve 0 si la issue es nuestra y 2 si es de otro. Sin usuario de gh (ME
-# vacío) no hay reclamo posible y la da por nuestra.
+# vacío, como con el token de la App en la nube) no hay reclamo por assignee
+# posible y la da por nuestra, salvo que ya esté en curso.
 #
 # La nube y el local actúan como la misma cuenta, y dos corridas locales
 # también: el assignee no las separa. Una issue en in-progress ya la está
@@ -305,7 +306,6 @@ ensure_worker_worktree() {  # issue number
 # asignar, sale con 1.
 claim_issue() {  # issue number
   local n="$1" others labels
-  [ -n "${ME:-}" ] || return 0
   if ! labels=$(gh issue view "$n" --json labels -q '.labels[].name' 2>/dev/null); then
     echo "❌ No pude leer #$n con gh." >&2
     return 1
@@ -314,6 +314,10 @@ claim_issue() {  # issue number
     echo "#$n ya está en curso. Si nadie la está trabajando, devuélvela a la cola con fabrica-release $n --pending." >&2
     return 2
   fi
+  [ -n "${ME:-}" ] || return 0
+  # En la nube, el token de la App no puede asignar, y no hace falta:
+  # fabrica-eligible ya se la asignó a quien puso ready-for-dev.
+  [ "${GITHUB_ACTIONS:-}" = true ] && return 0
   if ! gh issue edit "$n" --add-assignee "@me" 2>/dev/null; then
     echo "❌ No pude asignarme #$n con gh." >&2
     return 1
