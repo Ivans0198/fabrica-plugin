@@ -127,6 +127,24 @@ describe("los agentes de la nube", () => {
 
 // La etiqueta solo miraba su propio nombre: la nube tomaba una issue
 // bloqueada o asignada a otra persona, y gastaba la instalación y el agente.
+// En un re-run, GITHUB_ACTOR sigue siendo quien disparó la corrida: otra
+// persona gastaba su suscripción (revisión del 2026-11-23).
+describe("la credencial en un re-run", () => {
+  it.each(["claude-backlog.yml", "claude-mentions.yml"])(
+    "%s no usa el token de otra persona si la re-ejecuta alguien distinto",
+    (file) => {
+      const text = readFileSync(
+        path.join(REPO_ROOT, ".github/workflows", file),
+        "utf8",
+      );
+
+      expect(text).toMatch(
+        /"\$\{GITHUB_TRIGGERING_ACTOR:-\$GITHUB_ACTOR\}" != "\$GITHUB_ACTOR"/,
+      );
+    },
+  );
+});
+
 describe("claude-backlog.yml antes del agente", () => {
   const gateIndex = steps.findIndex((s) => s.id === "gate");
 

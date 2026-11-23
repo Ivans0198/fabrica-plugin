@@ -123,9 +123,12 @@ jobs:
             echo "Línea base aceptada tras revisar:"
             echo "$REVIEWED_RUN_URL"
           } >> "$GITHUB_STEP_SUMMARY"
+      # Sin la credencial guardada: npm ci corre el código de la rama, y un
+      # postinstall podría empujar con ella. El push va aparte, con el token.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ github.ref }}
+          persist-credentials: false
       - name: Trae el plugin fabrica
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -151,6 +154,8 @@ jobs:
       - name: Commitea la línea base aceptada
         id: commit
         if: steps.update.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -159,7 +164,7 @@ jobs:
             exit 1
           fi
           git commit -m "Línea base visual para Linux (aceptada a mano)"
-          git push
+          git push "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" "HEAD:${GITHUB_REF}"
       - name: Avisa en el PR de que falta confirmar el check
         if: steps.commit.outcome == 'success'
         env:

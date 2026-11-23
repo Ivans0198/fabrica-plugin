@@ -88,6 +88,12 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           NUM: ${{ github.event.issue.number || github.event.pull_request.number }}
         run: |
+          # En un re-run, GITHUB_ACTOR sigue siendo quien disparó la corrida:
+          # con otra persona re-ejecutándola, se gastaría el token ajeno.
+          if [ "${GITHUB_TRIGGERING_ACTOR:-$GITHUB_ACTOR}" != "$GITHUB_ACTOR" ]; then
+            echo "::error title=Re-ejecución de otra persona::$GITHUB_TRIGGERING_ACTOR re-ejecutó una corrida de $GITHUB_ACTOR. Para no usar el token de $GITHUB_ACTOR, vuelve a dispararla tú (la etiqueta o la mención)."
+            exit 1
+          fi
           pick() { jq -r --arg k "$1" '.[$k] // empty' <<< "$SECRETS_JSON"; }
           DEFAULT_API=$(pick ANTHROPIC_API_KEY)
           A="${GITHUB_ACTOR^^}"; A="${A//[^A-Z0-9]/_}"; KEY="CLAUDE_TOKEN_$A"

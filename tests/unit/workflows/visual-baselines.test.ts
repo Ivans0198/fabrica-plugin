@@ -21,6 +21,7 @@ function parseCaller(): WorkflowFile {
 interface WorkflowStep {
   name?: string;
   uses?: string;
+  with?: Record<string, unknown>;
   run?: string;
   if?: string;
   "continue-on-error"?: boolean;
@@ -64,6 +65,20 @@ function runLines(jobName: string): string {
 }
 
 describe("visual-baselines.yml", () => {
+  // `accept` corre `npm ci` con el código de una rama: con la credencial
+  // guardada por checkout, un postinstall podía empujar a main (revisión del
+  // 2026-11-23).
+  it("accept no deja la credencial en el checkout que corre el código de la rama", () => {
+    const checkout = stepsOf("accept").find(
+      (s) => s.uses?.startsWith("actions/checkout") && !s.with?.repository,
+    );
+
+    expect(checkout?.with?.["persist-credentials"]).toBe(false);
+    expect(runLines("accept")).toMatch(
+      /git push "https:\/\/x-access-token:\$\{GH_TOKEN\}@/,
+    );
+  });
+
   it("parsea como YAML válido", () => {
     expect(() => parseWorkflow()).not.toThrow();
   });
