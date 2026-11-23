@@ -201,7 +201,9 @@ Execute these steps IN ORDER:
    it before starting the next one. The turn budget can run out without
    warning, and uncommitted work is lost work. Before opening the PR, sync
    with the base: `git fetch origin && git rebase origin/<base>`, where
-   `<base>` is `factory.json` → `baseBranch` (`main` if missing).
+   `<base>` is `factory.json` → `baseBranch` (`main` if missing). If the
+   branch is already pushed, `git merge origin/<base>` instead: never
+   force-push.
 
 5. **Review**: launch `fabrica:code-reviewer` (and `fabrica:ui-reviewer` ONLY when the UI-review
    policy in `factory.json` → `review.uiReview` applies; see Definition of

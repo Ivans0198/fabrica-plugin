@@ -3,7 +3,8 @@
 // nada más. `fabrica-setup init` lo llama cuando el archivo ya está, por
 // ejemplo porque `claude plugin install --scope project` lo creó solo con
 // enabledPlugins. `fabrica-setup refresh` suma solo la atribución: los
-// permisos que el proyecto quitó no vuelven.
+// permisos que el proyecto quitó no vuelven. Los dos quitan los permisos que
+// la fábrica ya no da (RETIRED_ALLOW).
 //
 //   node merge-settings.mjs <settings.json del proyecto> <settings.json del plugin> [--attribution-only]
 //
@@ -14,6 +15,20 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const KINDS = ["allow", "deny"];
+
+// Permisos que la fábrica escribía y ya no: los quitan init y refresh. Con
+// --force-with-lease permitido, se podía reescribir la rama base sin
+// preguntar (revisión del 2026-11-23).
+const RETIRED_ALLOW = ["Bash(git push --force-with-lease:*)"];
+
+export function dropRetired(settings) {
+  const allow = settings.permissions?.allow;
+  if (!Array.isArray(allow) || !allow.some((r) => RETIRED_ALLOW.includes(r)))
+    return settings;
+  const next = structuredClone(settings);
+  next.permissions.allow = allow.filter((r) => !RETIRED_ALLOW.includes(r));
+  return next;
+}
 
 function rules(settings, kind, file) {
   const list = settings.permissions?.[kind];
@@ -71,10 +86,11 @@ function readJson(file) {
 function main([projectFile, templateFile, only]) {
   const old = readJson(projectFile);
   const template = readJson(templateFile);
-  const next =
+  const next = dropRetired(
     only === "--attribution-only"
       ? mergeAttribution(old, template)
-      : mergeSettings(old, template, projectFile);
+      : mergeSettings(old, template, projectFile),
+  );
   if (JSON.stringify(old) === JSON.stringify(next)) {
     console.log("same");
     return;

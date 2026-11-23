@@ -231,7 +231,9 @@ describe("fabrica-setup init", () => {
           "Bash(sudo *)",
         ]),
       );
-      expect(settings.permissions.allow).toContain(
+      // Revisión del 2026-11-23: con --force-with-lease permitido, se podía
+      // reescribir la rama base sin preguntar.
+      expect(settings.permissions.allow).not.toContain(
         "Bash(git push --force-with-lease:*)",
       );
     },
@@ -239,7 +241,7 @@ describe("fabrica-setup init", () => {
   );
 
   it(
-    "los permisos niegan los .env reales pero no .env.example ni --force-with-lease",
+    "los permisos niegan los .env reales pero no .env.example, y los push forzados también con lease",
     () => {
       const dir = gitRepo();
       setup(dir, ["init"]);
@@ -268,10 +270,14 @@ describe("fabrica-setup init", () => {
       expect(denied("Bash", "git push --force")).toBe(true);
       expect(denied("Bash", "git push origin main --force")).toBe(true);
       expect(denied("Bash", "git push -f origin main")).toBe(true);
-      expect(denied("Bash", "git push --force-with-lease")).toBe(false);
+      expect(denied("Bash", "git push --force-with-lease")).toBe(true);
       expect(denied("Bash", "git push origin impl-7 --force-with-lease")).toBe(
-        false,
+        true,
       );
+      expect(
+        denied("Bash", "git push origin HEAD:main --force-with-lease=main"),
+      ).toBe(true);
+      expect(denied("Bash", "git push -u origin impl-7")).toBe(false);
       expect(denied("Bash", "rm -rf /")).toBe(true);
       expect(denied("Bash", "rm -rf /tmp/build")).toBe(false);
     },
@@ -1116,6 +1122,32 @@ describe("fabrica-setup y la atribución de los commits", () => {
         attribution: SIN_ATRIBUCION,
       });
       expect(out).toMatch(/\.claude\/settings\.json.*Claude/);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "refresh le quita a un proyecto el permiso viejo de --force-with-lease, sin tocar los suyos",
+    () => {
+      const dir = gitRepo();
+      setup(dir, ["init"]);
+      writeSettings(dir, {
+        attribution: SIN_ATRIBUCION,
+        permissions: {
+          allow: ["Bash(git push --force-with-lease:*)", "Bash(make:*)"],
+        },
+      });
+
+      const { code, out } = setup(dir, ["refresh"]);
+
+      expect(code, out).toBe(0);
+      expect(
+        (
+          JSON.parse(read(dir, ".claude/settings.json")) as {
+            permissions: { allow: string[] };
+          }
+        ).permissions.allow,
+      ).toEqual(["Bash(make:*)"]);
     },
     TIMEOUT,
   );
