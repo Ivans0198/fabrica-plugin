@@ -229,6 +229,32 @@ describe("fabrica-devcontainer", () => {
     TIMEOUT,
   );
 
+  // Revisión del 2026-11-23: el puerto 53 y el 22 salían a cualquier IP, y
+  // IPv6 no tenía reglas.
+  it(
+    "el firewall solo deja el DNS a los resolvedores del contenedor, cierra el 22 e IPv6, y deja su marca al final",
+    async () => {
+      const dir = project();
+      await run(dir, []);
+      const firewall = readFileSync(
+        path.join(dir, ".devcontainer/init-firewall.sh"),
+        "utf8",
+      );
+
+      expect(firewall).not.toMatch(/--dport 22/);
+      expect(firewall).not.toMatch(/-p udp --dport 53 -j ACCEPT/);
+      expect(firewall).toContain("/etc/resolv.conf");
+      expect(firewall).toMatch(/ip6tables -P OUTPUT DROP/);
+      expect(
+        firewall.indexOf("rm -f /run/fabrica-firewall-ok"),
+      ).toBeGreaterThan(-1);
+      expect(firewall.trimEnd().split("\n").slice(-2).join("\n")).toContain(
+        "/run/fabrica-firewall-ok",
+      );
+    },
+    TIMEOUT,
+  );
+
   it.each([
     ["un dominio raro", ["--domain", "pypi.org; rm -rf /"]],
     ["una feature rara", ["--feature", "python $(id)"]],
