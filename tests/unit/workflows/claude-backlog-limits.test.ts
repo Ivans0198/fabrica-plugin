@@ -21,7 +21,8 @@ const CALLER_PATH = path.join(
 
 const GITHUB_JOB_HARD_CAP_MINUTES = 360;
 const MAX_TURNS = 200;
-const TIMEOUT_MINUTES = 120;
+// El agente tiene 110 y la espera de los checks del auto-merge, 35.
+const TIMEOUT_MINUTES = 150;
 
 interface WorkflowFile {
   on: Record<string, unknown>;

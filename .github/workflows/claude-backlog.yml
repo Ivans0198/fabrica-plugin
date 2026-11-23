@@ -24,8 +24,9 @@ jobs:
     # existen (el turno nocturno, a mano) no corre nada.
     if: github.event_name == 'issues' && github.event.label.name == 'ready-for-dev'
     runs-on: ubuntu-latest
-    # Por debajo del tope de 6h de GitHub.
-    timeout-minutes: 120
+    # Por debajo del tope de 6h de GitHub: el agente tiene 110 y la espera de
+    # los checks del auto-merge, 35.
+    timeout-minutes: 150
     concurrency:
       group: claude-backlog-${{ github.event.issue.number || github.run_id }}
       cancel-in-progress: false
@@ -219,17 +220,30 @@ jobs:
           fi
 
       # El agente no mergea (hooks/worker-guard.sh): el auto-merge lo pone este
-      # paso. Las etiquetas del evento son las de cuando se disparó la
-      # corrida, así que una que el agente se pusiera no cuenta.
+      # paso, cuando pasan los checks del PR. Las etiquetas del evento son las
+      # de cuando se disparó la corrida, así que una que el agente se pusiera
+      # no cuenta.
       - name: Auto-merge si la issue lo tenía
         if: steps.gate.outputs.skip != 'true' && success() && github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'auto-merge')
+        timeout-minutes: 35
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           NUM: ${{ github.event.issue.number }}
+          FABRICA_AUTOMERGE_WAIT: "1800"
         run: |
           [ -f .factory/gate-gave-up ] && exit 0
           gh issue view "$NUM" --json labels -q '.labels[].name' | grep -qx needs-human && exit 0
-          fabrica-automerge "$NUM" || true
+          if fabrica-automerge "$NUM"; then
+            # Un merge con github.token no dispara workflows: ni el cierre por
+            # "Closes #N" ni labels-cleanup. Se hacen aquí.
+            gh issue close "$NUM" --reason completed || true
+            for l in in-progress pending needs-human ready-for-dev; do
+              gh issue edit "$NUM" --remove-label "$l" 2>/dev/null || true
+            done
+            bash "$FABRICA/scripts/clear-blockers.sh" "$NUM" || true
+            bash "$FABRICA/scripts/sync-epic-status.sh" "$NUM" || true
+          fi
 
       # Con fabrica-release la issue sale de in-progress y de la tarjeta en
       # curso, igual que en local. Si la corrida falló antes de instalar el
