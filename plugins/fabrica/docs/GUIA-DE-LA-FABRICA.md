@@ -239,7 +239,9 @@ claude plugin install fabrica@fabrica-local --scope project
 ```
 
 Las sesiones de `gh` y de Claude quedan en volúmenes: no se repite al
-reconstruir. Si cambias `allowed-domains.txt`, reconstruye el contenedor.
+reconstruir. VS Code copia tu identidad de git (`user.name` y `user.email`)
+al contenedor; si lo abres de otra forma, configúrala dentro, o los commits
+de los workers no tendrán autor. Si cambias `allowed-domains.txt`, reconstruye el contenedor.
 
 ### Paso 4. Tu único trabajo: revisar y mergear 👑
 
