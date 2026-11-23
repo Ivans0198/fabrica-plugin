@@ -132,7 +132,12 @@ Show ONE block and wait for an explicit OK. In this order:
    paso, una sola vez y sin repetirlo después, que los tres primeros quedan
    configurados de verdad, mientras que `planning` es un recordatorio para sus
    propias sesiones (se elige con `/model`, no se aplica solo).
-6. **Lo que pasa después**: las tres fases restantes, una línea cada una.
+6. **Dev container**: si lo quieren. Es un contenedor desechable con la red
+   cerrada salvo GitHub, Anthropic y el registro de paquetes del stack, para
+   correr los workers con `bypassPermissions`, sin preguntas. Fuera de un
+   contenedor, `fabrica-backlog` no acepta ese modo. Recomiéndalo si van a
+   dejar workers corriendo solos; sin él, los workers usan el modo `auto`.
+7. **Lo que pasa después**: las tres fases restantes, una línea cada una.
 
 > **Regla de la cáscara: solo entra lo inevitable.** Framework, runner de
 > tests, linter y typechecker siempre. Un servicio externo (BD, auth) entra
@@ -353,6 +358,30 @@ arrancado. Comprueba que funciona antes de cerrar la fase:
 Genera las líneas base visuales (`npx playwright test --update-snapshots`) y
 commitéalas: si no, el Stop gate del primer ticket falla por baselines
 faltantes.
+
+### Dev container (si lo aceptaron en la propuesta)
+
+Escríbelo con `fabrica-devcontainer`, con la feature y los dominios del stack.
+Node ya va en la base (Claude Code lo necesita), igual que GitHub, Anthropic y
+npm:
+
+| Stack     | Opciones                                                                                                         |
+| --------- | ---------------------------------------------------------------------------------------------------------------- |
+| Node / TS | ninguna                                                                                                          |
+| Python    | `--feature ghcr.io/devcontainers/features/python:1 --domain pypi.org --domain files.pythonhosted.org`            |
+| Go        | `--feature ghcr.io/devcontainers/features/go:1 --domain proxy.golang.org --domain sum.golang.org`                |
+| Rust      | `--feature ghcr.io/devcontainers/features/rust:1 --domain index.crates.io --domain static.crates.io`             |
+| Java      | `--feature ghcr.io/devcontainers/features/java:1 --domain repo.maven.apache.org --domain repo1.maven.org`        |
+| Con UI    | además `--domain cdn.playwright.dev --domain playwright.download.prss.microsoft.com` (navegadores de Playwright) |
+
+Por ejemplo, para Python:
+`fabrica-devcontainer --feature ghcr.io/devcontainers/features/python:1 --domain pypi.org --domain files.pythonhosted.org`.
+Un servicio externo de la cáscara (una BD gestionada, un API) también va con
+`--domain`. Queda en `.devcontainer/` y se commitea con lo demás: es del
+proyecto, no lo administra `fabrica-setup`. En el reporte, di cómo se abre
+(VS Code: "Reopen in Container") y que la primera vez dentro hay que entrar a
+GitHub y a Claude (`gh auth login`, `claude`) y registrar el plugin desde
+GitHub, porque la carpeta local del marketplace no existe dentro.
 
 ### Si NO hay UI
 

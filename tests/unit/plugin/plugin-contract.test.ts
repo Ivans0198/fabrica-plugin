@@ -289,6 +289,16 @@ describe("planeación con Spec Kit", () => {
     expect(rule).toMatch(/corredor de tests/);
   });
 
+  it("el bootstrap ofrece el dev container en la propuesta y lo escribe con fabrica-devcontainer", () => {
+    const body = read("skills/bootstrap/SKILL.md");
+    const proposal = body
+      .split("### 0.4 La propuesta de cáscara")[1]!
+      .split("## Fase 1")[0]!;
+
+    expect(proposal).toMatch(/\*\*Dev container\*\*/);
+    expect(body).toContain("fabrica-devcontainer --feature");
+  });
+
   it("el aviso de falla de la nube nombra la GitHub App", () => {
     const workflow = readFileSync(
       path.join(REPO_ROOT, ".github/workflows/claude-backlog.yml"),

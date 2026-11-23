@@ -1,0 +1,19 @@
+# Dominios a los que el contenedor puede salir, uno por línea, además de los
+# rangos de GitHub (web, API y git) que el firewall pide a api.github.com/meta.
+# Se copia a la imagen: después de cambiarlo, reconstruye el contenedor.
+
+# Claude Code
+api.anthropic.com
+claude.ai
+console.anthropic.com
+platform.claude.com
+statsig.com
+sentry.io
+
+# GitHub, lo que no está en sus rangos
+raw.githubusercontent.com
+objects.githubusercontent.com
+codeload.github.com
+
+# npm: Claude Code y los scripts de la fábrica usan Node
+registry.npmjs.org

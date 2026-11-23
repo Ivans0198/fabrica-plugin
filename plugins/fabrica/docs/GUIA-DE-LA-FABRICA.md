@@ -217,9 +217,29 @@ parte de lo último de la rama base en GitHub, así que también se niega si
 cambios sin commitear o sin subir. Si algo no cuadra, se detiene y te dice qué lo arregla. Después busca la
 siguiente tarea disponible y lanza un Claude que la
 trabaja solo (con permisos `auto` puede pedirte confirmación alguna vez; para
-cero interrupciones, ábrelo en el devcontainer): marca la tarea "en progreso", escribe los tests PRIMERO,
+cero interrupciones, córrelo en el dev container, más abajo): marca la tarea "en progreso", escribe los tests PRIMERO,
 implementa hasta que pasen, se hace revisar por el agente revisor hasta
 recibir APPROVED, y abre un **Pull Request en borrador**. Tú no haces nada.
+
+**El dev container: workers sin preguntas.** Con
+`PERMISSION_MODE=bypassPermissions`, los workers no piden confirmación para
+nada. Eso solo es seguro en un contenedor desechable, así que
+`fabrica-backlog` se niega a correr en ese modo fuera de uno.
+`fabrica-devcontainer` escribe uno en `.devcontainer/` (el bootstrap te lo
+ofrece). Su firewall bloquea toda salida menos GitHub, Anthropic y el registro
+de paquetes del stack, en `.devcontainer/allowed-domains.txt`, y dentro ya va
+`PERMISSION_MODE=bypassPermissions`. Ábrelo con "Reopen in Container" de VS
+Code. La primera vez, dentro:
+
+```bash
+gh auth login
+claude                                                # entra a tu cuenta
+claude plugin marketplace add <owner>/fabrica-plugin  # el plugin, desde GitHub
+claude plugin install fabrica@fabrica-local --scope project
+```
+
+Las sesiones de `gh` y de Claude quedan en volúmenes: no se repite al
+reconstruir. Si cambias `allowed-domains.txt`, reconstruye el contenedor.
 
 ### Paso 4. Tu único trabajo: revisar y mergear 👑
 
