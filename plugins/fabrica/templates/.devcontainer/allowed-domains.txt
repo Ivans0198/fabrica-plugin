@@ -7,7 +7,6 @@ api.anthropic.com
 claude.ai
 console.anthropic.com
 platform.claude.com
-statsig.anthropic.com
 statsig.com
 sentry.io
 

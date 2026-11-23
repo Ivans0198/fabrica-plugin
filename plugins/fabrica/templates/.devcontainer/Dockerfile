@@ -23,8 +23,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 ENV DEVCONTAINER=true
 
-RUN mkdir -p /usr/local/share/npm-global /home/node/.claude /home/node/.config/gh \
-  && chown -R node:node /usr/local/share/npm-global /home/node/.claude /home/node/.config
+# git entra a GitHub con la sesión de gh (en un volumen), también al clonar el
+# plugin privado. En el sistema y no en ~/.gitconfig, que no sobrevive a una
+# reconstrucción.
+RUN git config --system credential.https://github.com.helper '!gh auth git-credential'
+
+RUN mkdir -p /home/node/.claude /home/node/.config/gh \
+  && chown -R node:node /home/node/.claude /home/node/.config
+
+# Como root, en /usr/local/bin: Debian reinicia el PATH en las shells de login
+# (las de VS Code y el CLI de dev containers), y un prefijo de npm propio se
+# perdía. Las actualizaciones van apagadas en devcontainer.json: para subir de
+# versión, reconstruye.
+ARG CLAUDE_CODE_VERSION=latest
+RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
 # La lista de dominios va dentro de la imagen, de root: si el firewall la
 # leyera del proyecto, el agente podría agrandarla y volver a correrlo.
@@ -36,8 +48,3 @@ RUN chmod 0755 /usr/local/bin/init-firewall.sh \
   && chmod 0440 /etc/sudoers.d/node-firewall
 
 USER node
-ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
-ENV PATH=$PATH:/usr/local/share/npm-global/bin
-
-ARG CLAUDE_CODE_VERSION=latest
-RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}

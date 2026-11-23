@@ -188,6 +188,47 @@ describe("fabrica-devcontainer", () => {
     TIMEOUT,
   );
 
+  // Debian reinicia el PATH en /etc/profile, y VS Code y el CLI de dev
+  // containers abren shells de login: con un prefijo de npm propio, `claude`
+  // no aparecía (probado con Docker, 2026-11-23).
+  it(
+    "instala Claude Code como root, en el PATH de cualquier shell",
+    async () => {
+      const dir = project();
+      await run(dir, []);
+      const dockerfile = readFileSync(
+        path.join(dir, ".devcontainer/Dockerfile"),
+        "utf8",
+      );
+
+      const install = dockerfile.indexOf("@anthropic-ai/claude-code");
+      expect(install).toBeGreaterThan(-1);
+      expect(install).toBeLessThan(dockerfile.indexOf("USER node"));
+      expect(dockerfile).not.toContain("NPM_CONFIG_PREFIX");
+    },
+    TIMEOUT,
+  );
+
+  // Sin esto, git no usa la sesión de gh y `claude plugin marketplace add`
+  // no puede clonar el plugin privado. En ~/.gitconfig se perdería al
+  // reconstruir: solo ~/.config/gh va en un volumen.
+  it(
+    "git usa la sesión de gh para GitHub, configurado para todo el sistema",
+    async () => {
+      const dir = project();
+      await run(dir, []);
+      const dockerfile = readFileSync(
+        path.join(dir, ".devcontainer/Dockerfile"),
+        "utf8",
+      );
+
+      expect(dockerfile).toMatch(
+        /git config --system credential\.https:\/\/github\.com\.helper '!gh auth git-credential'/,
+      );
+    },
+    TIMEOUT,
+  );
+
   it.each([
     ["un dominio raro", ["--domain", "pypi.org; rm -rf /"]],
     ["una feature rara", ["--feature", "python $(id)"]],
