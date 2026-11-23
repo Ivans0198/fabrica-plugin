@@ -21,9 +21,11 @@ mensaje y para.
 Una issue por invocación, con la persona mirando.
 
 1. **La issue.** Si la persona nombró una, es esa. Si no, `fabrica-next-issue`.
-   Si sale con 1, no hay nada elegible: dilo y para.
-2. **El reclamo.** `fabrica-claim N`. Si sale con 2, la tiene otra persona:
-   vuelve al paso 1. Si sale con 1, muestra su mensaje y para. Si sale bien,
+   Si sale con 1, no hay nada elegible: dilo y para. Si sale con 3, no pudo
+   leer la cola: muestra su mensaje y para.
+2. **El reclamo.** `fabrica-claim N`. Si sale con 2, la tiene otra persona o
+   ya está en curso: muestra su mensaje; si la persona la nombró, para, y si
+   no, vuelve al paso 1. Si sale con 1, muestra su mensaje y para. Si sale bien,
    la última línea es la ruta del worktree.
 3. **Entra al worktree** con `EnterWorktree` y esa ruta (`path`). Desde ahí
    corre el Stop gate y trabajan los revisores.

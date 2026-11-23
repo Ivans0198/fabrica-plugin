@@ -51,7 +51,7 @@ issue_number() {
 case "${1:-}" in
   next)
     reconcile_board >&2
-    n=$(next_issue)
+    n=$(next_issue) || exit 3
     [ -n "$n" ] || { echo "No hay issues elegibles en la cola." >&2; exit 1; }
     echo "$n"
     ;;
@@ -60,10 +60,10 @@ case "${1:-}" in
     check_setup_on_base || exit 1
     rc=0
     claim_issue "$n" || rc=$?
-    if [ "$rc" -ne 0 ]; then
-      echo "⚔ #$n ya está reclamada por otra persona." >&2
-      exit "$rc"
+    if [ "$rc" -eq 2 ]; then
+      echo "⚔ #$n no se puede tomar: ya la reclamó otra persona o está en curso." >&2
     fi
+    [ "$rc" -eq 0 ] || exit "$rc"
     mark_in_progress "$n"
     if [ "${GITHUB_ACTIONS:-}" = true ]; then
       # El runner es desechable y no tiene EnterWorktree: rama en el lugar.

@@ -68,7 +68,8 @@ function git(cwd: string, script: string): Promise<RunResult> {
  * Un `gh` de mentira que anota cada llamada y contesta según variables:
  * FAKE_PENDING (números de la cola), FAKE_LABELS_<N> (etiquetas de N),
  * FAKE_STATE_<N> (estado de N), FAKE_OTHERS (assignees ajenos) y
- * FAKE_PR_COUNT (PRs con "Closes #N").
+ * FAKE_PR_COUNT (PRs con "Closes #N"). FAKE_FAIL_LIST, FAKE_FAIL_VIEW_<N> y
+ * FAKE_FAIL_EDIT hacen fallar esas llamadas, como con la red caída.
  */
 async function installFakeGh(dir: string): Promise<string> {
   const binDir = path.join(dir, "stub-bin");
@@ -78,6 +79,11 @@ async function installFakeGh(dir: string): Promise<string> {
     path.join(binDir, "gh"),
     `#!/usr/bin/env bash
 echo "$@" >> "${log}"
+case "$1 $2" in
+  "issue list") [ -n "\${FAKE_FAIL_LIST:-}" ] && exit 1 ;;
+  "issue view") var="FAKE_FAIL_VIEW_$3"; [ -n "\${!var:-}" ] && exit 1 ;;
+  "issue edit") [ -n "\${FAKE_FAIL_EDIT:-}" ] && exit 1 ;;
+esac
 case "$1 $2" in
   "api user") echo "\${FAKE_ME:-tester}" ;;
   "issue list") for n in \${FAKE_PENDING:-}; do echo "$n"; done ;;
@@ -172,6 +178,83 @@ describe("comandos de la cola", () => {
 
       expect(code).toBe(0);
       expect(stdout.trim()).toBe("4");
+    },
+    TIMEOUT,
+  );
+
+  // Revisión del 2026-11-23: con gh caído, una issue bloqueada parecía libre
+  // y una cola ilegible se leía como vacía.
+  it(
+    "fabrica-next-issue sale con 3 si gh no puede listar la cola, en vez de darla por vacía",
+    async () => {
+      const { repo, env } = await project();
+
+      const { code, stderr } = await run(["next"], repo, {
+        ...env,
+        FAKE_PENDING: "3",
+        FAKE_FAIL_LIST: "1",
+      });
+
+      expect(code).toBe(3);
+      expect(stderr).toMatch(/no pude/i);
+    },
+    TIMEOUT,
+  );
+
+  it.each([
+    [
+      "el estado de su bloqueo",
+      { FAKE_LABELS_3: "blocked-by-9", FAKE_FAIL_VIEW_9: "1" },
+    ],
+    ["sus etiquetas", { FAKE_FAIL_VIEW_3: "1" }],
+  ])(
+    "fabrica-next-issue no da por libre una issue si no puede leer %s",
+    async (_caso, fake) => {
+      const { repo, env } = await project();
+
+      const { stdout } = await run(["next"], repo, {
+        ...env,
+        FAKE_PENDING: "3",
+        ...fake,
+      });
+
+      expect(stdout.trim()).toBe("");
+    },
+    TIMEOUT,
+  );
+
+  // La nube y el local actúan como la misma cuenta: el assignee no los
+  // separa, pero in-progress dice que alguien ya la está trabajando.
+  it(
+    "fabrica-claim no toma una issue que ya está en curso, sin asignársela",
+    async () => {
+      const { repo, env } = await project();
+
+      const { code, stderr } = await run(["claim", "5"], repo, {
+        ...env,
+        FAKE_LABELS_5: "in-progress",
+      });
+
+      expect(code).toBe(2);
+      expect(stderr).toMatch(/en curso/);
+      expect(stderr).toMatch(/fabrica-release 5 --pending/);
+      expect(await calls()).not.toMatch(/issue edit 5 --add-assignee/);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "fabrica-claim no sigue si no pudo asignarse la issue",
+    async () => {
+      const { repo, env } = await project();
+
+      const { code } = await run(["claim", "5"], repo, {
+        ...env,
+        FAKE_FAIL_EDIT: "1",
+      });
+
+      expect(code).not.toBe(0);
+      expect(await calls()).not.toMatch(/--add-label in-progress/);
     },
     TIMEOUT,
   );
@@ -552,6 +635,43 @@ describe("comandos de la cola", () => {
 
         expect(code).toBe(3);
         expect(stderr).toMatch(/#9/);
+        expect(await calls()).not.toMatch(/issue edit/);
+      },
+      TIMEOUT,
+    );
+
+    it.each([
+      ["cerrada", { FAKE_STATE_5: "CLOSED" }, /cerrada/],
+      ["en curso", { FAKE_LABELS_5: "in-progress" }, /en curso/],
+    ])(
+      "sale con 2 si la issue está %s, sin tocarla",
+      async (_caso, fake, why) => {
+        const { repo, env } = await project();
+
+        const { code, stderr } = await run(
+          ["eligible", "5", "--actor", "ana"],
+          repo,
+          { ...env, ...fake },
+        );
+
+        expect(code).toBe(2);
+        expect(stderr).toMatch(why);
+        expect(await calls()).not.toMatch(/issue edit/);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      "falla sin tocarla si gh no puede leer la issue",
+      async () => {
+        const { repo, env } = await project();
+
+        const { code } = await run(["eligible", "5", "--actor", "ana"], repo, {
+          ...env,
+          FAKE_FAIL_VIEW_5: "1",
+        });
+
+        expect(code).toBe(1);
         expect(await calls()).not.toMatch(/issue edit/);
       },
       TIMEOUT,

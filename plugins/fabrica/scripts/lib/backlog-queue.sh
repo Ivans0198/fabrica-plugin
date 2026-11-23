@@ -148,13 +148,15 @@ reconcile_board() {
       done
 }
 
+# Falla cerrada: si gh no puede leer la issue o sus bloqueos, cuenta como
+# bloqueada. Con la red caída, una issue bloqueada no puede parecer libre.
 is_blocked() {  # issue number -> 0 if blocked
   local n="$1"
-  local blockers
+  local labels blockers
+  labels=$(gh issue view "$n" --json labels -q '.labels[].name') || return 0
   # POSIX sed (grep -oP is GNU-only: on macOS it would fail and, swallowed by
   # `|| true`, silently make every blocked issue look eligible).
-  blockers=$(gh issue view "$n" --json labels -q '.labels[].name' \
-             | sed -n 's/^blocked-by-\([0-9][0-9]*\)$/\1/p')
+  blockers=$(printf '%s\n' "$labels" | sed -n 's/^blocked-by-\([0-9][0-9]*\)$/\1/p')
   for b in $blockers; do
     state=$(gh issue view "$b" --json state -q .state)
     [ "$state" != "CLOSED" ] && return 0
@@ -166,24 +168,30 @@ is_blocked() {  # issue number -> 0 if blocked
 # para que la trabaje la nube. La nube y el local actúan como la misma
 # persona, así que el reclamo por assignee no los separa, y el local llegó a
 # tomar la issue de la nube. Para dársela al local, se quita la etiqueta.
+# Si no se pueden leer sus etiquetas, la da por de la nube: el local no la toma.
 is_cloud_lane() {  # issue number -> 0 if it belongs to the cloud
-  gh issue view "$1" --json labels -q '.labels[].name' | grep -qx 'ready-for-dev'
+  local labels
+  labels=$(gh issue view "$1" --json labels -q '.labels[].name') || return 0
+  printf '%s\n' "$labels" | grep -qx 'ready-for-dev'
 }
 
+# Sale con 1 si gh no puede listar la cola: una cola ilegible no es una vacía.
 next_issue() {  # -> first eligible pending issue number, or empty
   # Skips issues already assigned to someone else (their claim is respected)
   # and the ones in the cloud's lane.
-  local lane=()
+  local lane=() list
   [ -n "$ONLY_LABEL" ] && lane=(--label "$ONLY_LABEL")
   for prio in "priority:high" "priority:medium" "priority:low" ""; do
     local pf=()
     [ -n "$prio" ] && pf=(--label "$prio")
     local jqsel=".[] | select((.assignees|length)==0 or ([.assignees[].login]|index(\"$ME\"))) | .number"
     [ -n "$ONLY_MINE" ] && jqsel=".[] | select([.assignees[].login]|index(\"$ME\")) | .number"
-    for n in $(gh issue list --limit 500 --label pending "${lane[@]}" "${pf[@]}" --state open \
-                 --json number,assignees \
-                 --jq "$jqsel" \
-               | sort -n); do
+    if ! list=$(gh issue list --limit 500 --label pending "${lane[@]}" "${pf[@]}" --state open \
+                  --json number,assignees --jq "$jqsel"); then
+      echo "❌ No pude leer la cola con gh issue list (red, cuota o sesión de gh)." >&2
+      return 1
+    fi
+    for n in $(printf '%s\n' "$list" | sort -n); do
       is_cloud_lane "$n" && continue
       if ! is_blocked "$n"; then echo "$n"; return; fi
     done
@@ -263,10 +271,26 @@ ensure_worker_worktree() {  # issue number
 # compañero, la nube) ganó la carrera, suelta el reclamo.
 # Devuelve 0 si la issue es nuestra y 2 si es de otro. Sin usuario de gh (ME
 # vacío) no hay reclamo posible y la da por nuestra.
+#
+# La nube y el local actúan como la misma cuenta, y dos corridas locales
+# también: el assignee no las separa. Una issue en in-progress ya la está
+# trabajando alguien, así que tampoco se toma (2). Si no se puede leer o
+# asignar, sale con 1.
 claim_issue() {  # issue number
-  local n="$1" others
+  local n="$1" others labels
   [ -n "${ME:-}" ] || return 0
-  gh issue edit "$n" --add-assignee "@me" 2>/dev/null || true
+  if ! labels=$(gh issue view "$n" --json labels -q '.labels[].name' 2>/dev/null); then
+    echo "❌ No pude leer #$n con gh." >&2
+    return 1
+  fi
+  if printf '%s\n' "$labels" | grep -qx in-progress; then
+    echo "#$n ya está en curso. Si nadie la está trabajando, devuélvela a la cola con fabrica-release $n --pending." >&2
+    return 2
+  fi
+  if ! gh issue edit "$n" --add-assignee "@me" 2>/dev/null; then
+    echo "❌ No pude asignarme #$n con gh." >&2
+    return 1
+  fi
   others=$(gh issue view "$n" --json assignees --jq "[.assignees[].login] | map(select(. != \"$ME\")) | length" 2>/dev/null || echo 0)
   if [ "${others:-0}" -gt 0 ]; then
     gh issue edit "$n" --remove-assignee "@me" 2>/dev/null || true
@@ -379,12 +403,13 @@ cleanup_worktrees() {  # [dry-run]
   git worktree prune 2>/dev/null || true
 }
 
-# Los números de las issues que bloquean a N y siguen abiertas, uno por línea.
-open_blockers() {  # issue number
+# Los números de las issues que bloquean a N y siguen abiertas, uno por línea,
+# leídos de sus etiquetas. Un bloqueo cuyo estado no se puede leer cuenta como
+# abierto.
+open_blockers() {  # labels of the issue, one per line
   local b
-  for b in $(gh issue view "$1" --json labels -q '.labels[].name' \
-               | sed -n 's/^blocked-by-\([0-9][0-9]*\)$/\1/p'); do
-    [ "$(gh issue view "$b" --json state -q .state)" != CLOSED ] && echo "$b"
+  for b in $(printf '%s\n' "$1" | sed -n 's/^blocked-by-\([0-9][0-9]*\)$/\1/p'); do
+    [ "$(gh issue view "$b" --json state -q .state 2>/dev/null)" != CLOSED ] && echo "$b"
   done
   return 0
 }
@@ -392,10 +417,25 @@ open_blockers() {  # issue number
 # ¿Se puede tomar N por pedido de `actor` (quien puso ready-for-dev)? 0 si sí,
 # y se la asigna, para que la nube y las sesiones locales respeten el
 # reclamo; 2 si está asignada a otra persona; 3 si la bloquea una issue
-# abierta. La misma regla que la cola local.
+# abierta. La misma regla que la cola local. También 2 si está cerrada o ya en
+# curso (in-progress: la trabaja alguien, quizá la misma cuenta en local), y 1
+# si gh no puede leerla.
 issue_eligible_for() {  # issue number, actor
-  local n="$1" actor="$2" blockers others
-  blockers=$(open_blockers "$n" | sed 's/^/#/' | tr '\n' ' ')
+  local n="$1" actor="$2" state labels blockers others
+  if ! state=$(gh issue view "$n" --json state -q .state) \
+    || ! labels=$(gh issue view "$n" --json labels -q '.labels[].name'); then
+    echo "❌ No pude leer #$n con gh." >&2
+    return 1
+  fi
+  if [ "$state" = CLOSED ]; then
+    echo "#$n está cerrada." >&2
+    return 2
+  fi
+  if printf '%s\n' "$labels" | grep -qx in-progress; then
+    echo "#$n ya está en curso: alguien la está trabajando." >&2
+    return 2
+  fi
+  blockers=$(open_blockers "$labels" | sed 's/^/#/' | tr '\n' ' ')
   if [ -n "$blockers" ]; then
     echo "#$n está bloqueada por ${blockers% }: se toma cuando se cierre." >&2
     return 3

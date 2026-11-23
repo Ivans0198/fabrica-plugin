@@ -267,7 +267,10 @@ main() {
   while [ "$PROCESSED" -lt "$MAX_ISSUES" ]; do
     WORKER_LAUNCHED=""
     TICKET_OUTCOME_RECORDED=""
-    N=$(next_issue)
+    if ! N=$(next_issue); then
+      echo "❌ No pude leer la cola. Processed: $PROCESSED"
+      exit 1
+    fi
     if [ -z "${N:-}" ]; then
       echo "✅ Backlog empty (no eligible pending issues). Processed: $PROCESSED"
       exit 0
@@ -278,7 +281,7 @@ main() {
     # Claim-and-verify: grab the issue by assignee, re-read, and back off if
     # someone else (a teammate, the cloud) won the race.
     if ! claim_issue "$N"; then
-      echo "⚔ #$N ya está reclamado por otra persona, lo salto"
+      echo "⚔ #$N no se puede tomar (reclamada por otra persona, en curso o gh sin respuesta), la salto"
       SKIPPED="${SKIPPED:-} $N"
       PROCESSED=$((PROCESSED + 1))        # cuenta como intento: nunca bucle infinito
       sleep $((RANDOM % 8 + 3))           # jitter: rompe el ping-pong entre dos corredores
