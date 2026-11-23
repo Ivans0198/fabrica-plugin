@@ -120,7 +120,7 @@ describe("workflow de checks", () => {
       s.uses?.startsWith("actions/setup-node"),
     );
 
-    expect(step?.with?.["node-version"]).toBe(20);
+    expect(step?.with?.["node-version"]).toBe(24);
   });
 
   it("instala chromium después de las dependencias y antes de los tests", () => {

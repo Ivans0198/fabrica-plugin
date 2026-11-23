@@ -185,3 +185,47 @@ describe("factory-cmd.sh sin factory.json", () => {
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
 });
+
+// Un worker que edita factory.json no puede cambiar qué corre fabrica-cmd
+// (revisión del 2026-11-23).
+describe("factory-cmd.sh en un worker", () => {
+  let workDir = "";
+
+  afterEach(async () => {
+    if (workDir) await rm(workDir, REMOVE_TEMP_DIR_OPTIONS);
+    workDir = "";
+  });
+
+  it(
+    "corre el comando del factory.json de la rama base, no el del árbol",
+    async () => {
+      workDir = await mkdtemp(path.join(tmpdir(), "fabrica-cmd-worker-"));
+      const config = (word: string) =>
+        JSON.stringify({ commands: { test: ["echo", word] } });
+      await writeFile(path.join(workDir, "factory.json"), config("base"));
+      const prepared = spawnSync(
+        "bash",
+        [
+          "-c",
+          `set -e
+           git init -q -b main . && git config user.email t@t.com && git config user.name t
+           git init -q --bare origin.git
+           git remote add origin ./origin.git
+           git add factory.json && git commit -q -m base && git push -q origin main
+           git checkout -q -b impl-7`,
+        ],
+        { cwd: workDir },
+      );
+      expect(prepared.status, prepared.stderr.toString()).toBe(0);
+      await writeFile(path.join(workDir, "factory.json"), config("arbol"));
+
+      const { stdout } = await runFactoryCmd(workDir, "test", {
+        ...process.env,
+        FABRICA_WORKER: "1",
+      });
+
+      expect(stdout.trim()).toBe("base");
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+});

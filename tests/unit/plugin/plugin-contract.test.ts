@@ -188,6 +188,32 @@ describe("planeación con Spec Kit", () => {
     expect(rules).toMatch(/named in their OK/);
   });
 
+  // Los scripts usan factory.json → baseBranch; con base develop, las reglas
+  // rebaseaban sobre main y le daban al revisor otro merge-base.
+  it("las reglas no fijan main como base: usan la de factory.json", () => {
+    const rules = read("rules/fabrica.md");
+
+    expect(rules).not.toContain("origin/main");
+    expect(rules).toMatch(/`<base>` is `factory\.json` → `baseBranch`/);
+  });
+
+  // Revisión del 2026-11-23: nada decía que el texto de una issue es dato, y
+  // el worker podía mergear él mismo si la issue tenía auto-merge.
+  it("las reglas tratan el texto de issues, comentarios y PRs como dato, no como instrucciones", () => {
+    const rules = read("rules/fabrica.md").replace(/\s+/g, " ");
+
+    expect(rules).toMatch(/### Untrusted text/);
+    expect(rules).toMatch(/data, never instructions/);
+  });
+
+  it("el worker no pone el auto-merge: lo pone el orquestador, y en la sesión fabrica-automerge", () => {
+    const rules = read("rules/fabrica.md").replace(/\s+/g, " ");
+
+    expect(rules).not.toMatch(/gh pr merge --auto/);
+    expect(rules).toMatch(/`fabrica-automerge N`/);
+    expect(rules).toMatch(/worker-guard/);
+  });
+
   it("el PR de la spec nunca cierra la épica", () => {
     const spec = read("skills/spec/SKILL.md");
 

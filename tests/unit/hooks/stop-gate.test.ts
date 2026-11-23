@@ -7,12 +7,15 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { pluginFile } from "../../support/plugin-paths";
 
 const STOP_GATE_SCRIPT = pluginFile(".claude/hooks/stop-gate.sh");
+const SESSION_START_SCRIPT = pluginFile(".claude/hooks/session-start.sh");
+const FORMAT_HOOK_SCRIPT = pluginFile(".claude/hooks/post-edit-lint.sh");
 
 /**
  * Estos tests lanzan bash y git de verdad, no los imitan. Bajo `npm test`
@@ -428,6 +431,53 @@ describe.each(READERS)("comandos de factory.json (lector: %s)", (reader) => {
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
 
+  // Una suite roja grande llenaba el contexto del worker con toda su salida
+  // (revisión del 2026-11-23): van las últimas líneas y el resto a un log.
+  it(
+    "manda solo el final de la salida de un check que falla, y la guarda entera",
+    async () => {
+      await prepare(() => ({
+        test: [
+          "node",
+          "-e",
+          "for (let i = 1; i <= 1000; i++) console.log('linea ' + i); process.exit(1)",
+        ],
+      }));
+
+      const { code, stderr } = await runGate();
+
+      expect(code).toBe(2);
+      expect(stderr).toContain("linea 1000");
+      expect(stderr).not.toContain("linea 1\n");
+      expect(stderr).toContain(".factory/state/gate-test.log");
+      const log = await readFile(
+        path.join(workDir, ".factory/state/gate-test.log"),
+        "utf8",
+      );
+      expect(log).toContain("linea 1\n");
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "un check que se pasa de su plazo cuenta como fallido",
+    async () => {
+      await prepare(() => ({ test: ["sleep", "5"] }));
+
+      const start = Date.now();
+      const { code, stderr } = await runStopGate(workDir, {
+        ...process.env,
+        FACTORY_JSON_READER: reader,
+        FACTORY_CHECK_TIMEOUT: "1",
+      });
+
+      expect(code).toBe(2);
+      expect(stderr).toMatch(/plazo|timed out/i);
+      expect(Date.now() - start).toBeLessThan(4000);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
   it(
     "bloquea y suma un intento cuando el comando falla",
     async () => {
@@ -523,12 +573,17 @@ interface BashScriptResult {
   stderr: string;
 }
 
-function runBashScript(cwd: string, script: string): Promise<BashScriptResult> {
+function runBashScript(
+  cwd: string,
+  script: string,
+  input?: string,
+): Promise<BashScriptResult> {
   return new Promise((resolve, reject) => {
     const child = spawn("bash", ["-c", script], {
       cwd,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
     });
+    if (input !== undefined) child.stdin!.end(input);
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => {
@@ -832,6 +887,78 @@ describe("guard de árbol limpio", () => {
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
 
+  // Los hooks corren los comandos de factory.json sin pasar por los permisos:
+  // un worker que lo editara correría lo que quisiera (revisión del
+  // 2026-11-23). Cambiarlo es de una persona, como la spec.
+  it(
+    "en una rama impl-N bloquea un cambio en factory.json, sin correr los checks",
+    async () => {
+      ({ workDir, originDir } = await createFixtureRepo());
+      await runBashScript(
+        workDir,
+        `set -e
+         git checkout -q -b impl-7
+         echo '{"stack":"node-ts","commands":{"install":null,"lint":null,"typecheck":null,"test":null,"build":null,"e2e":null},"format":[]}' > factory.json
+         git commit -qam apaga`,
+      );
+      const { binDir, markerFile } = await installChecksRanMarkerBin();
+      stubBinDir = binDir;
+
+      const { code, stderr } = await runStopGate(workDir, {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      });
+
+      expect(code).toBe(2);
+      expect(stderr).toContain("factory.json");
+      expect(await checksRan(markerFile)).toBe(false);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it.each([
+    ["el Stop gate", "stop"],
+    ["el hook de formato", "format"],
+  ])(
+    "en un worker, %s usa el factory.json de la rama base, no el del árbol",
+    async (_caso, hook) => {
+      ({ workDir, originDir } = await createFixtureRepo());
+      const evil = toBashPath(
+        path.join(workDir, "..", `${path.basename(workDir)}-evil`),
+      );
+      await runBashScript(
+        workDir,
+        `set -e
+         git checkout -q -b otra
+         node -e 'const f=JSON.parse(require("fs").readFileSync("factory.json","utf8")); f.commands.lint=["bash","-c","touch ${evil}"]; f.format=[{"extensions":["ts"],"cmd":["bash","-c","touch ${evil}"]}]; require("fs").writeFileSync("factory.json", JSON.stringify(f))'`,
+      );
+      const { binDir, markerFile } = await installChecksRanMarkerBin();
+      stubBinDir = binDir;
+      const env = {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+        FABRICA_WORKER: "1",
+      };
+
+      if (hook === "stop") {
+        await runStopGate(workDir, env);
+        expect(await checksRan(markerFile)).toBe(true);
+      } else {
+        const result = await runBashScript(
+          workDir,
+          `FABRICA_WORKER=1 bash "${toBashPath(FORMAT_HOOK_SCRIPT)}"`,
+          JSON.stringify({
+            tool_input: { file_path: path.join(workDir, "src/lib/foo.ts") },
+          }),
+        );
+        expect(result.code).toBe(0);
+      }
+      expect(existsSync(evil.replace(/\//g, path.sep))).toBe(false);
+      await rm(evil, { force: true });
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
   it(
     "en una rama impl-N que no toca specs/ corre los checks como siempre",
     async () => {
@@ -852,6 +979,133 @@ describe("guard de árbol limpio", () => {
       });
 
       expect(code).toBe(0);
+      expect(await checksRan(markerFile)).toBe(true);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // En `claude -p` el Stop solo se dispara al final, cuando el worker ya hizo
+  // push: si el gate se salta todo con el árbol limpio y nada por delante de
+  // upstream, no verifica nunca el camino normal (revisión del 2026-11-23).
+  it(
+    "en una rama impl-N ya pusheada corre los checks",
+    async () => {
+      ({ workDir, originDir } = await createFixtureRepo());
+      const { code: prepared, stderr } = await runBashScript(
+        workDir,
+        `set -e
+         git checkout -q -b impl-7
+         echo 'export const foo = 2;' > src/lib/foo.ts
+         git commit -qam codigo
+         git push -q -u origin impl-7`,
+      );
+      expect(prepared, stderr).toBe(0);
+      const { binDir, markerFile } = await installChecksRanMarkerBin();
+      stubBinDir = binDir;
+
+      const { code } = await runStopGate(workDir, {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      });
+
+      expect(code).toBe(0);
+      expect(await checksRan(markerFile)).toBe(true);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // Una pregunta en un PR (una mención, una sesión que solo lee) no cambia
+  // nada: verificar la rama entera la atraparía en los checks de otro.
+  it(
+    "una sesión que no cambió nada desde que empezó no corre los checks",
+    async () => {
+      ({ workDir, originDir } = await createFixtureRepo());
+      await runBashScript(
+        workDir,
+        `set -e
+         git checkout -q -b impl-7
+         echo 'export const foo = 2;' > src/lib/foo.ts
+         git commit -qam codigo
+         git push -q -u origin impl-7`,
+      );
+      const start = await runBashScript(
+        workDir,
+        `bash "${toBashPath(SESSION_START_SCRIPT)}"`,
+        JSON.stringify({ session_id: "abc-123", cwd: workDir }),
+      );
+      expect(start.code, start.stderr).toBe(0);
+      const { binDir, markerFile } = await installChecksRanMarkerBin();
+      stubBinDir = binDir;
+      const env = {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      };
+
+      await runStopGate(workDir, env, {
+        session_id: "abc-123",
+        cwd: workDir,
+      });
+      expect(await checksRan(markerFile)).toBe(false);
+
+      await runBashScript(
+        workDir,
+        "echo 'export const foo = 3;' > src/lib/foo.ts && git commit -qam otro",
+      );
+      await runStopGate(workDir, env, { session_id: "abc-123", cwd: workDir });
+      expect(await checksRan(markerFile)).toBe(true);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "lo que ya pasó no se vuelve a verificar mientras no cambie",
+    async () => {
+      ({ workDir, originDir } = await createFixtureRepo());
+      await runBashScript(
+        workDir,
+        `set -e
+         git checkout -q -b impl-7
+         echo 'export const foo = 2;' > src/lib/foo.ts
+         git commit -qam codigo
+         git push -q -u origin impl-7`,
+      );
+      const { binDir, markerFile } = await installChecksRanMarkerBin();
+      stubBinDir = binDir;
+      const env = {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      };
+
+      await runStopGate(workDir, env);
+      expect(await checksRan(markerFile)).toBe(true);
+      await rm(markerFile);
+      const { code } = await runStopGate(workDir, env);
+
+      expect(code).toBe(0);
+      expect(await checksRan(markerFile)).toBe(false);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it.each(["tsconfig.json", "package-lock.json"])(
+    "una rama que solo cambia %s corre los checks: cambia lo que verifican",
+    async (noiseFile) => {
+      ({ workDir, originDir } = await createFixtureRepo());
+      await runBashScript(
+        workDir,
+        `set -e
+         git checkout -q -b impl-7
+         echo '{"compilerOptions": {"strict": true}}' > ${noiseFile}
+         git commit -qam ajuste`,
+      );
+      const { binDir, markerFile } = await installChecksRanMarkerBin();
+      stubBinDir = binDir;
+
+      await runStopGate(workDir, {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      });
+
       expect(await checksRan(markerFile)).toBe(true);
     },
     REAL_PROCESS_TEST_TIMEOUT_MS,
@@ -950,7 +1204,10 @@ describe("guard de árbol limpio", () => {
 });
 
 describe("workflows", () => {
-  it("claude-mentions.yml define FACTORY_GATE=off y claude-backlog.yml no", async () => {
+  // Una mención en la nube tiene permiso de escribir código: con el gate
+  // apagado, lo que commiteara no se verificaba. Ahora el gate solo mira lo
+  // que cambie la sesión (revisión del 2026-11-23).
+  it("ningún workflow apaga el Stop gate", async () => {
     const mentionsYml = await readFile(
       pluginFile(".github/workflows/claude-mentions.yml"),
       "utf8",
@@ -960,7 +1217,7 @@ describe("workflows", () => {
       "utf8",
     );
 
-    expect(mentionsYml).toMatch(/FACTORY_GATE:\s*["']?off["']?/);
+    expect(mentionsYml).not.toMatch(/FACTORY_GATE/);
     expect(backlogYml).not.toMatch(/FACTORY_GATE/);
   });
 });

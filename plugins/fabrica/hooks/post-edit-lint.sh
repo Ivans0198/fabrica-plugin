@@ -9,6 +9,7 @@
 source "$(dirname "${BASH_SOURCE[0]}")/../scripts/lib/factory-config.sh"
 
 INPUT=$(cat)
+factory_use_base_config
 [ -f "$FACTORY_CONFIG_FILE" ] || exit 0
 
 FILE=$(printf '%s' "$INPUT" | factory_query - hookpath "" | sed -n '2p')

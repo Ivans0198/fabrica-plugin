@@ -3,7 +3,7 @@
 # allowed-domains.txt. Basado en el dev container de referencia de Claude Code
 # (github.com/anthropics/claude-code/tree/main/.devcontainer). Lo escribió
 # fabrica-devcontainer; es del proyecto, edítalo si hace falta.
-FROM node:22-bookworm
+FROM node:24-bookworm
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
   git \
@@ -33,9 +33,10 @@ RUN mkdir -p /home/node/.claude /home/node/.config/gh \
 
 # Como root, en /usr/local/bin: Debian reinicia el PATH en las shells de login
 # (las de VS Code y el CLI de dev containers), y un prefijo de npm propio se
-# perdía. Las actualizaciones van apagadas en devcontainer.json: para subir de
-# versión, reconstruye.
-ARG CLAUDE_CODE_VERSION=latest
+# perdía. La versión va fija y las actualizaciones apagadas en
+# devcontainer.json: para subir de versión, cambia CLAUDE_CODE_VERSION y
+# reconstruye.
+ARG CLAUDE_CODE_VERSION=2.1.319
 RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
 # La lista de dominios va dentro de la imagen, de root: si el firewall la

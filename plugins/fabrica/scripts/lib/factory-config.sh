@@ -13,6 +13,20 @@
 
 FACTORY_CONFIG_FILE="${FACTORY_CONFIG_FILE:-factory.json}"
 
+# En un worker (FABRICA_WORKER=1), factory.json se lee de la rama base y no del
+# árbol: los hooks y fabrica-cmd corren sus comandos sin pasar por los
+# permisos, y el agente podría escribir uno propio (revisión del 2026-11-23).
+# La base la pone el orquestador en FABRICA_BASE. Sin origin/<base> se queda
+# con el del árbol, igual que el Stop gate, que sin la base no compara nada.
+# Se llama después de entrar a la raíz del checkout.
+factory_use_base_config() {
+  [ "${FABRICA_WORKER:-}" = 1 ] && [ "$FACTORY_CONFIG_FILE" = factory.json ] || return 0
+  local base="${FABRICA_BASE:-main}" copy
+  copy=$(git rev-parse --git-path fabrica-factory-base.json 2>/dev/null) || return 0
+  git show "origin/$base:factory.json" > "$copy" 2>/dev/null || { rm -f "$copy"; return 0; }
+  FACTORY_CONFIG_FILE="$copy"
+}
+
 # Protocolo de salida de factory_query: la primera línea es el estado
 # (@@set@@, @@off@@ o "@@error@@ <motivo>") y las siguientes, los argumentos.
 # En las reglas de formato, cada regla empieza con una línea @@rule@@.

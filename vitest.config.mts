@@ -20,6 +20,10 @@ export default defineConfig({
     // estos no lo son: lanzan bash, git y binarios falsos de verdad. Bajo
     // carga agotan el plazo sin estar rotos.
     testTimeout: 20_000,
+    // Los afterEach de ui-preflight bajan servidores de verdad, y `down`
+    // puede esperar hasta 11 s: con los 10 s por defecto de los hooks, a
+    // veces fallaba el test sin que nada estuviera roto.
+    hookTimeout: 30_000,
     // Sólo el kit. Los tests de tu app los recoge tu propio runner, y
     // *.spec.ts es de Playwright: mantener la separación por extensión y por
     // carpeta evita que cada runner coleccione la suite del otro.

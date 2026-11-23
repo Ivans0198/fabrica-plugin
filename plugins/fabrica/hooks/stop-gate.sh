@@ -13,11 +13,10 @@ set -o pipefail
 # shellcheck source=../../scripts/lib/factory-config.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../scripts/lib/factory-config.sh"
 
-# Kill switch: sessions that only answer questions (e.g. @claude mentions that
-# just reply in a thread) never produce code, so verifying them with lint,
-# types and tests protects nothing, it only traps them. Exit before touching
-# the retry counter file, so a worker session running in parallel keeps its
-# own count untouched.
+# Kill switch, for a person who needs to stop the gate by hand. No workflow
+# uses it: a session that changes nothing is already skipped below
+# (hooks/session-start.sh). Exit before touching the retry counter file, so a
+# worker session running in parallel keeps its own count untouched.
 if [ "${FACTORY_GATE:-}" = "off" ]; then
   exit 0
 fi
@@ -28,8 +27,12 @@ fi
 # ahí CLAUDE_PROJECT_DIR sigue en la raíz, y solo el cwd de la entrada del
 # hook dice dónde está. Ese cwd vale solo si queda dentro del proyecto.
 ROOT="${CLAUDE_PROJECT_DIR:-}"
+SESSION_ID=""
 if [ ! -t 0 ] && command -v jq >/dev/null 2>&1; then
-  hook_cwd=$(jq -r '.cwd // empty' 2>/dev/null || true)
+  hook_input=$(cat)
+  SESSION_ID=$(printf '%s' "$hook_input" | jq -r '.session_id // empty' 2>/dev/null || true)
+  [[ "$SESSION_ID" =~ ^[A-Za-z0-9_-]+$ ]] || SESSION_ID=""
+  hook_cwd=$(printf '%s' "$hook_input" | jq -r '.cwd // empty' 2>/dev/null || true)
   if [ -n "$hook_cwd" ] && [ -d "$hook_cwd" ]; then
     hook_top=$(git -C "$hook_cwd" rev-parse --show-toplevel 2>/dev/null || true)
     case "$hook_top/" in
@@ -40,6 +43,7 @@ fi
 if [ -n "$ROOT" ]; then
   cd "$ROOT" || { echo "❌ Stop gate: no pude entrar a $ROOT" >&2; exit 2; }
 fi
+factory_use_base_config
 
 # Anti-infinite-loop guard: after MAX_GATE_RUNS blocked attempts, let Claude
 # stop so it can label the issue needs-human instead of looping forever. The
@@ -98,13 +102,21 @@ if [[ "$(git branch --show-current 2>/dev/null)" =~ ^impl-[0-9]+$ ]]; then
 $spec_changes
 Revert those changes (git checkout origin/<base> -- <file>, then commit). If the work really needs a different spec, stop and release the issue with fabrica-release N --needs-human \"<what the spec is missing>\"."
   fi
+  # factory.json says which commands the hooks run, outside the permission
+  # system: changing it is a human's call, like the spec.
+  if changed_since_base | grep -qx 'factory.json'; then
+    fail "❌ An issue branch must not change factory.json: it decides which commands the hooks run. Revert it (git checkout origin/<base> -- factory.json, then commit). If the ticket really needs another command, stop and release the issue with fabrica-release N --needs-human \"<what factory.json needs>\"."
+  fi
 fi
 
 # Review-only guard: if the session changed nothing beyond generated noise
-# (clean tree modulo GENERATED_NOISE_FILES, no commits beyond upstream),
+# (clean tree modulo GENERATED_NOISE_FILES) and HEAD is already verified,
 # there is nothing to verify. Don't run the full suite just to end a Q&A
-# session. Any failure to determine "ahead" counts as ahead, so worker
-# sessions with local commits always get checked. Some dev servers rewrite
+# session. HEAD counts as verified if the gate already passed on it, if the
+# session has not moved it since it started (hooks/session-start.sh), or if it
+# has no commits beyond the base. Pushing does not verify anything: a worker
+# pushes before its last Stop, so "nothing beyond upstream" would skip the
+# checks on the normal path. Some dev servers rewrite
 # files on every run (`next dev` does it to tsconfig.json and to the CLAUDE.md
 # agent block), and `npm install` rewrites package-lock.json, so without this
 # allowance the first gate run in a session dirties the tree and the guard can
@@ -135,32 +147,49 @@ only_generated_noise_is_dirty() {
   return 0
 }
 
-if only_generated_noise_is_dirty; then
-  AHEAD=$(git rev-list --count '@{upstream}..HEAD' 2>/dev/null || echo "?")
-  if [ "$AHEAD" = "0" ]; then
-    rm -f "$COUNTER_FILE"
-    exit 0
+# El sha que pasó el gate vive en el git-dir del worktree: nunca ensucia el
+# árbol ni viaja con la rama.
+PASSED_FILE=$(git rev-parse --git-path fabrica-gate-passed 2>/dev/null || true)
+
+head_already_verified() {
+  local head base ahead start
+  head=$(git rev-parse HEAD 2>/dev/null) || return 1
+  [ -n "$PASSED_FILE" ] && [ "$(cat "$PASSED_FILE" 2>/dev/null)" = "$head" ] && return 0
+  if [ -n "$SESSION_ID" ]; then
+    start=$(cat "$(git rev-parse --git-path "fabrica-session-$SESSION_ID" 2>/dev/null)" 2>/dev/null)
+    [ "$start" = "$head" ] && return 0
   fi
+  base=$(factory_read_value baseBranch 2>/dev/null)
+  base="${base:-main}"
+  ahead=$(git rev-list --count "origin/$base..HEAD" 2>/dev/null) || return 1
+  [ "$ahead" = "0" ]
+}
+
+if only_generated_noise_is_dirty && head_already_verified; then
+  rm -f "$COUNTER_FILE"
+  exit 0
 fi
 
 # Planning guard: a spec branch (fabrica:spec, plan, tasks) only changes
 # specs/ and docs/plan-maestro.md. There is no code to verify, and a red main
 # must not block writing a spec. Everything that changed since the branch left
 # the base (commits, edits and new files) has to be planning or generated
-# noise; anything else runs the full gate. Without origin/<base> it does not
-# apply.
+# noise, with at least one planning file: a branch that only changes
+# tsconfig.json or the lockfile changes what the checks verify, so it runs the
+# full gate. Without origin/<base> it does not apply.
 only_planning_changes() {
-  local changed file
+  local changed file planning=""
   changed=$(changed_since_base)
   [ -n "$changed" ] || return 1
   while IFS= read -r file; do
     case "$file" in
+      specs/* | docs/plan-maestro.md) planning=1 ;;
       # .gitignore: `fabrica-setup speckit` adds .specify/ to it.
-      specs/* | docs/plan-maestro.md | .gitignore) ;;
+      .gitignore) ;;
       *) is_generated_noise_file "$file" || return 1 ;;
     esac
   done <<<"$changed"
-  return 0
+  [ -n "$planning" ]
 }
 
 if only_planning_changes; then
@@ -171,8 +200,16 @@ fi
 # Corre commands.<name> de factory.json y bloquea si falla. Un comando en null
 # no se corre. Si factory.json está mal, eso también bloquea: un gate que no
 # puede leer qué verificar no puede dejar pasar nada.
+#
+# Cada check tiene plazo: lo que queda de GATE_BUDGET, por debajo de los 600 s
+# del hook en hooks.json, para que un check colgado bloquee en vez de que el
+# hook se corte. Si falla, Claude recibe las últimas OUTPUT_TAIL líneas, y la
+# salida entera queda en .factory/state/gate-<check>.log: una suite roja
+# grande llenaba el contexto.
+GATE_BUDGET=570
+OUTPUT_TAIL=150
 run_check() {
-  local name="$1" label="$2" status output
+  local name="$1" label="$2" status out log limit runner=() why=""
   factory_read_command "$name"
   status=$?
   if [ "$status" -eq 3 ]; then
@@ -181,10 +218,20 @@ run_check() {
   if [ "$status" -ne 0 ]; then
     fail "❌ $FACTORY_ERROR"
   fi
-  if ! output=$("${FACTORY_CMD[@]}" 2>&1 < /dev/null); then
-    fail "❌ $label failed (${FACTORY_CMD[*]}). Fix before finishing:
-$output"
+  limit="${FACTORY_CHECK_TIMEOUT:-$((GATE_BUDGET - SECONDS))}"
+  [ "$limit" -gt 0 ] || fail "❌ $label did not run: the Stop gate ran out of time (${GATE_BUDGET}s). Make the checks faster."
+  command -v timeout >/dev/null 2>&1 && runner=(timeout --kill-after=5 "$limit")
+  out=$(mktemp)
+  "${runner[@]}" "${FACTORY_CMD[@]}" > "$out" 2>&1 < /dev/null
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    log=".factory/state/gate-$name.log"
+    mkdir -p .factory/state && mv "$out" "$log"
+    [ "$status" -eq 124 ] && why=" timed out after ${limit}s (plazo del Stop gate)"
+    fail "❌ $label failed (${FACTORY_CMD[*]})$why. Fix before finishing. Last $OUTPUT_TAIL lines (full output in $log):
+$(tail -n "$OUTPUT_TAIL" "$log")"
   fi
+  rm -f "$out"
 }
 
 # 0. The format rules are read by the post-edit hook, which never blocks; a
@@ -209,4 +256,9 @@ run_check test "Tests"
 run_check e2e "E2E (visual/a11y)"
 
 rm -f "$COUNTER_FILE"
+# Solo un árbol limpio deja HEAD como verificado: con cambios sin commitear,
+# lo que pasó no es lo que está en HEAD.
+if [ -n "$PASSED_FILE" ] && only_generated_noise_is_dirty; then
+  git rev-parse HEAD > "$PASSED_FILE" 2>/dev/null || true
+fi
 exit 0

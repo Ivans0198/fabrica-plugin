@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Pasa a listo el PR de una issue con la etiqueta auto-merge y le pone el auto-merge. Uso: fabrica-automerge <N>
+exec bash "$(dirname "$(readlink -f "$0")")/../scripts/issue-queue.sh" automerge "$@"

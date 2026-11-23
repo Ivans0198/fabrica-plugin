@@ -1262,6 +1262,70 @@ describe("rama del worker", () => {
   );
 });
 
+// La etiqueta se lee antes de lanzar al worker: si el agente se la pusiera
+// él mismo, no cuenta (revisión del 2026-11-23).
+describe("auto-merge al terminar", () => {
+  let workDir = "";
+
+  afterEach(async () => {
+    if (workDir) {
+      await rm(workDir, REMOVE_TEMP_DIR_OPTIONS);
+      workDir = "";
+    }
+  });
+
+  async function decide(
+    startLabels: string,
+    setup?: (dir: string) => Promise<void>,
+  ): Promise<string> {
+    workDir = await setupWorkDir();
+    const { binDir } = await installFakeGh(workDir);
+    await setup?.(workDir);
+    const { stdout } = await runBash(
+      `source scripts/process-backlog.sh
+automerge_issue() { echo "automerge $1"; }
+maybe_automerge 42 "${startLabels}"`,
+      workDir,
+      {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+        ISSUE_VIEW_JSON: JSON.stringify({ state: "OPEN", labels: [] }),
+        PR_LIST_COUNT: "1",
+      },
+    );
+    return stdout;
+  }
+
+  it(
+    "si la issue tenía auto-merge al empezar, lo pone",
+    async () => {
+      expect(await decide("pending\nauto-merge")).toMatch(/automerge 42/);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "si no la tenía al empezar, no lo pone aunque la tenga ahora",
+    async () => {
+      expect(await decide("pending")).not.toMatch(/automerge/);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "si el Stop gate se rindió, no lo pone",
+    async () => {
+      const out = await decide("auto-merge", async (dir) => {
+        const factory = path.join(dir, ".claude/worktrees/impl-42/.factory");
+        await mkdir(factory, { recursive: true });
+        await writeFile(path.join(factory, "gate-gave-up"), "x");
+      });
+      expect(out).not.toMatch(/automerge/);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+});
+
 describe("worker sin PR", () => {
   let workDir = "";
 
@@ -1323,6 +1387,42 @@ describe("worker sin PR", () => {
       const log = await readLog(logFile);
       expect(log).not.toMatch(/needs-human/);
       expect(log).not.toMatch(/issue comment 42/);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // El gate se rinde dejando `.factory/gate-gave-up` y prohíbe el PR solo en
+  // el texto de las reglas: si el worker lo abre igual, no puede contar como
+  // éxito.
+  it(
+    "si el Stop gate se rindió, va a needs-human aunque haya PR",
+    async () => {
+      workDir = await setupWorkDir();
+      await writeProjectConfig(workDir, FULL_STATUS_OPTIONS);
+      const { binDir, logFile } = await installFakeGh(workDir);
+      const factoryDir = path.join(
+        workDir,
+        ".claude/worktrees/impl-42/.factory",
+      );
+      await mkdir(factoryDir, { recursive: true });
+      await writeFile(path.join(factoryDir, "gate-gave-up"), "x");
+
+      await runBash(
+        "source scripts/process-backlog.sh; ME=tester; check_worker_left_no_pr 42",
+        workDir,
+        {
+          ...process.env,
+          PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+          ISSUE_VIEW_JSON: OPEN_IN_PROGRESS_ISSUE,
+          PR_LIST_COUNT: "1",
+        },
+      );
+
+      const log = await readLog(logFile);
+      expect(log).toMatch(
+        /issue edit 42 --add-label needs-human --remove-label in-progress/,
+      );
+      expect(log).toMatch(/issue comment 42 .*Stop gate/s);
     },
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
@@ -2087,6 +2187,64 @@ describe("bypassPermissions solo en un contenedor", () => {
       expect(code).not.toBe(0);
       expect(stderr).toMatch(/contenedor/);
       expect(await readLog(claude.logFile)).toBe("");
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // Un contenedor cualquiera, o uno cuyo firewall falló al arrancar, deja la
+  // red abierta (revisión del 2026-11-23). init-firewall.sh deja la marca al
+  // final, y la red se prueba en el momento.
+  async function bypassInContainer(
+    mark: boolean,
+    reachable: boolean,
+  ): Promise<{ code: number | null; stderr: string }> {
+    workDir = await setupWorkDir();
+    const { binDir } = await installFakeGh(workDir);
+    const claude = await installFakeClaude(workDir);
+    await writeFile(
+      path.join(binDir, "curl"),
+      `#!/usr/bin/env bash\nexit ${reachable ? 0 : 7}\n`,
+    );
+    await chmod(path.join(binDir, "curl"), 0o755);
+    const markFile = path.join(workDir, "fabrica-firewall-ok");
+    if (mark) await writeFile(markFile, "");
+    return runBash("bash scripts/process-backlog.sh", workDir, {
+      ...process.env,
+      PATH: `${binDir}${path.delimiter}${claude.binDir}${path.delimiter}${process.env.PATH}`,
+      PERMISSION_MODE: "bypassPermissions",
+      DEVCONTAINER: "true",
+      FABRICA_FIREWALL_MARK: markFile,
+    });
+  }
+
+  it(
+    "dentro de un contenedor, se niega si el firewall no dejó su marca",
+    async () => {
+      const { code, stderr } = await bypassInContainer(false, false);
+
+      expect(code).not.toBe(0);
+      expect(stderr).toMatch(/firewall/);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "dentro de un contenedor, se niega si la red deja salir a example.com",
+    async () => {
+      const { code, stderr } = await bypassInContainer(true, true);
+
+      expect(code).not.toBe(0);
+      expect(stderr).toMatch(/example\.com/);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "con la marca y la red cerrada, la guarda deja pasar",
+    async () => {
+      const { stderr } = await bypassInContainer(true, false);
+
+      expect(stderr).not.toMatch(/firewall|contenedor|example\.com/);
     },
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );

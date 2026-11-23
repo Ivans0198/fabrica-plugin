@@ -2,9 +2,13 @@
 # Cierra la red del contenedor: solo deja salir a los rangos de GitHub y a los
 # dominios de /usr/local/etc/fabrica-allowed-domains.txt. Basado en el
 # init-firewall.sh de referencia de Claude Code. Corre como root al arrancar
-# (postStartCommand) y termina comprobando que example.com no responde.
+# (postStartCommand) y termina comprobando que example.com no responde. Solo
+# entonces deja /run/fabrica-firewall-ok, que fabrica-backlog exige para correr
+# con bypassPermissions.
 set -euo pipefail
 IFS=$'\n\t'
+
+rm -f /run/fabrica-firewall-ok
 
 DOMAINS_FILE=/usr/local/etc/fabrica-allowed-domains.txt
 
@@ -25,13 +29,35 @@ if [ -n "$DOCKER_DNS_RULES" ]; then
   echo "$DOCKER_DNS_RULES" | xargs -L 1 iptables -t nat
 fi
 
-# DNS, SSH y localhost, antes de cerrar.
-iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
-iptables -A INPUT -p udp --sport 53 -j ACCEPT
-iptables -A OUTPUT -p tcp --dport 22 -j ACCEPT
-iptables -A INPUT -p tcp --sport 22 -m state --state ESTABLISHED -j ACCEPT
+# DNS solo a los resolvedores del contenedor: el puerto 53 abierto a cualquier
+# IP era un canal para sacar datos. Sin SSH: git va por HTTPS con la sesión de
+# gh.
+resolvers=$(awk '$1 == "nameserver" && $2 ~ /^[0-9.]+$/ {print $2}' /etc/resolv.conf)
+if [ -z "$resolvers" ]; then
+  echo "ERROR: /etc/resolv.conf no trae un resolvedor IPv4" >&2
+  exit 1
+fi
+for ns in $resolvers; do
+  for proto in udp tcp; do
+    iptables -A OUTPUT -p "$proto" -d "$ns" --dport 53 -j ACCEPT
+    iptables -A INPUT -p "$proto" -s "$ns" --sport 53 -j ACCEPT
+  done
+done
 iptables -A INPUT -i lo -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
+
+# IPv6 cerrado: la lista de permitidos es solo IPv4.
+if command -v ip6tables >/dev/null 2>&1 && ip6tables -L >/dev/null 2>&1; then
+  ip6tables -F
+  ip6tables -A INPUT -i lo -j ACCEPT
+  ip6tables -A OUTPUT -o lo -j ACCEPT
+  ip6tables -P INPUT DROP
+  ip6tables -P FORWARD DROP
+  ip6tables -P OUTPUT DROP
+elif [ -n "$(ip -6 route show default 2>/dev/null)" ]; then
+  echo "ERROR: hay salida por IPv6 y no puedo cerrarla con ip6tables" >&2
+  exit 1
+fi
 
 ipset create allowed-domains hash:net
 
@@ -91,3 +117,4 @@ for url in https://api.github.com/zen https://api.anthropic.com; do
   fi
 done
 echo "Firewall listo: example.com bloqueado, GitHub y Anthropic abiertos"
+touch /run/fabrica-firewall-ok

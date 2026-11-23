@@ -38,6 +38,19 @@ if [ "$PERMISSION_MODE" = bypassPermissions ] \
   echo "❌ PERMISSION_MODE=bypassPermissions solo corre dentro de un contenedor. Ábrelo con el de fabrica-devcontainer, o usa PERMISSION_MODE=auto" >&2
   exit 1
 fi
+# Dentro del contenedor, el firewall tiene que estar arriba: init-firewall.sh
+# deja la marca solo si terminó bien, y la red se prueba en el momento (la
+# marca sobrevive a un reinicio sin postStartCommand).
+if [ "$PERMISSION_MODE" = bypassPermissions ]; then
+  if [ ! -f "${FABRICA_FIREWALL_MARK:-/run/fabrica-firewall-ok}" ]; then
+    echo "❌ El firewall del contenedor no está arriba: corre sudo /usr/local/bin/init-firewall.sh, o usa PERMISSION_MODE=auto" >&2
+    exit 1
+  fi
+  if curl --connect-timeout 3 -s -o /dev/null https://example.com 2>/dev/null; then
+    echo "❌ La red deja salir a example.com: el firewall no está cerrando. Corre sudo /usr/local/bin/init-firewall.sh, o usa PERMISSION_MODE=auto" >&2
+    exit 1
+  fi
+fi
 # shellcheck source=lib/factory-config.sh
 source "$SCRIPT_DIR/lib/factory-config.sh"
 WORKER_MODEL="${WORKER_MODEL:-$(factory_read_model worker sonnet)}"
@@ -184,9 +197,18 @@ check_worker_left_no_pr() {  # issue number
   [ "$state" = "CLOSED" ] && return 0   # closed by idempotency: no PR is correct
   labels=$(echo "$info" | jq -r '.labels[].name')
   echo "$labels" | grep -qx "in-progress" || return 0
+  wt_dir=$(worktree_dir_for "$n")
+  # Las reglas prohíben el PR cuando el Stop gate se rinde, pero eso es texto:
+  # si el worker lo abrió igual, no cuenta como éxito.
+  if [ -f "$wt_dir/.factory/gate-gave-up" ]; then
+    echo "⚠ El Stop gate se rindió en #$n: needs-human aunque haya PR"
+    flag_needs_human "$n" "🤖 **El Stop gate se rindió** después de agotar los ciclos de corrección: lint, tipos o tests siguen en rojo en la rama \`impl-$n\`. Si hay un PR, no lo mergees así.
+
+Revisa el worktree \`impl-$n\`, arregla lo que falla o ajusta la issue, y retómala con \`/fabrica:backlog $n\`."
+    return 0
+  fi
   pr_declares_closes "$n" && return 0
 
-  wt_dir=$(worktree_dir_for "$n")
   last_commit=$(git -C "$wt_dir" log --oneline -1 2>/dev/null || echo "sin commits")
   dirty_count=$(dirty_file_count "$wt_dir")
 
@@ -222,6 +244,18 @@ y después, en Claude, \`/fabrica:backlog\`. El nuevo worker puede continuar des
   fi
 }
 
+# El auto-merge lo pone el orquestador, no el worker. Cuenta la etiqueta que
+# tenía la issue antes de lanzarlo: si el agente se la pusiera él mismo, no
+# vale. Tampoco si el Stop gate se rindió o la issue terminó en needs-human.
+maybe_automerge() {  # issue number, labels at start (one per line)
+  local n="$1" now
+  printf '%s\n' "$2" | grep -qx auto-merge || return 0
+  [ -f "$(worktree_dir_for "$n")/.factory/gate-gave-up" ] && return 0
+  now=$(gh issue view "$n" --json labels -q '.labels[].name' 2>/dev/null) || return 0
+  printf '%s\n' "$now" | grep -qx needs-human && return 0
+  automerge_issue "$n" || true
+}
+
 # Launches the worker for issue $1 in the background and sets WORKER_PID.
 # Pulled out of main() so tests can drive it directly against a fake `claude`.
 run_worker() {
@@ -239,6 +273,10 @@ run_worker() {
     # revisor, termina su turno esperando la notificación y `claude -p` se
     # cierra sin la respuesta (probado el 2026-11-16).
     export CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
+    # hooks/worker-guard.sh: un worker no mergea ni empuja a la rama base.
+    export FABRICA_WORKER=1
+    # La base de la que se lee factory.json (lib/factory-config.sh).
+    export FABRICA_BASE="$(base_branch)"
     exec claude -p "$(bash "$SCRIPT_DIR/worker-prompt.sh" one "$n")" \
       --permission-mode "$PERMISSION_MODE" \
       --max-turns "$MAX_TURNS" \
@@ -258,7 +296,10 @@ main() {
   while [ "$PROCESSED" -lt "$MAX_ISSUES" ]; do
     WORKER_LAUNCHED=""
     TICKET_OUTCOME_RECORDED=""
-    N=$(next_issue)
+    if ! N=$(next_issue); then
+      echo "❌ No pude leer la cola. Processed: $PROCESSED"
+      exit 1
+    fi
     if [ -z "${N:-}" ]; then
       echo "✅ Backlog empty (no eligible pending issues). Processed: $PROCESSED"
       exit 0
@@ -269,7 +310,7 @@ main() {
     # Claim-and-verify: grab the issue by assignee, re-read, and back off if
     # someone else (a teammate, the cloud) won the race.
     if ! claim_issue "$N"; then
-      echo "⚔ #$N ya está reclamado por otra persona, lo salto"
+      echo "⚔ #$N no se puede tomar (reclamada por otra persona, en curso o gh sin respuesta), la salto"
       SKIPPED="${SKIPPED:-} $N"
       PROCESSED=$((PROCESSED + 1))        # cuenta como intento: nunca bucle infinito
       sleep $((RANDOM % 8 + 3))           # jitter: rompe el ping-pong entre dos corredores
@@ -277,6 +318,7 @@ main() {
     fi
 
     # Deterministic bookkeeping: don't rely on the worker remembering to do it.
+    START_LABELS=$(gh issue view "$N" --json labels -q '.labels[].name' 2>/dev/null || true)
     mark_in_progress "$N"
 
     run_worker "$N"
@@ -345,6 +387,7 @@ main() {
       WORKER_EXIT_CODE=$?
     fi
     handle_worker_exit "$N" "$WORKER_EXIT_CODE"
+    [ "$WORKER_EXIT_CODE" -eq 0 ] && maybe_automerge "$N" "$START_LABELS"
     TICKET_OUTCOME_RECORDED=1
 
     PROCESSED=$((PROCESSED + 1))
