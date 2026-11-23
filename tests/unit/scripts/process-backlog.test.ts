@@ -1327,6 +1327,42 @@ describe("worker sin PR", () => {
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
 
+  // El gate se rinde dejando `.factory/gate-gave-up` y prohíbe el PR solo en
+  // el texto de las reglas: si el worker lo abre igual, no puede contar como
+  // éxito.
+  it(
+    "si el Stop gate se rindió, va a needs-human aunque haya PR",
+    async () => {
+      workDir = await setupWorkDir();
+      await writeProjectConfig(workDir, FULL_STATUS_OPTIONS);
+      const { binDir, logFile } = await installFakeGh(workDir);
+      const factoryDir = path.join(
+        workDir,
+        ".claude/worktrees/impl-42/.factory",
+      );
+      await mkdir(factoryDir, { recursive: true });
+      await writeFile(path.join(factoryDir, "gate-gave-up"), "x");
+
+      await runBash(
+        "source scripts/process-backlog.sh; ME=tester; check_worker_left_no_pr 42",
+        workDir,
+        {
+          ...process.env,
+          PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+          ISSUE_VIEW_JSON: OPEN_IN_PROGRESS_ISSUE,
+          PR_LIST_COUNT: "1",
+        },
+      );
+
+      const log = await readLog(logFile);
+      expect(log).toMatch(
+        /issue edit 42 --add-label needs-human --remove-label in-progress/,
+      );
+      expect(log).toMatch(/issue comment 42 .*Stop gate/s);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
   it(
     "no toca nada si gh falla al comprobar si hay PR (falla segura, no falso positivo)",
     async () => {

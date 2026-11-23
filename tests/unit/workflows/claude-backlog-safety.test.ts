@@ -14,6 +14,7 @@ import { REPO_ROOT } from "../../support/plugin-paths";
 interface Step {
   name?: string;
   id?: string;
+  "timeout-minutes"?: number;
   uses?: string;
   if?: string;
   run?: string;
@@ -25,7 +26,9 @@ const workflow = load(
     path.join(REPO_ROOT, ".github/workflows/claude-backlog.yml"),
     "utf8",
   ),
-) as { jobs: Record<string, { steps: Step[] }> };
+) as {
+  jobs: Record<string, { steps: Step[]; "timeout-minutes"?: number }>;
+};
 const steps = Object.values(workflow.jobs).flatMap((job) => job.steps);
 const agent = steps.find((s) =>
   s.uses?.startsWith("anthropics/claude-code-action"),
@@ -44,6 +47,33 @@ describe("claude-backlog.yml después del agente", () => {
     expect(net?.run).toMatch(
       /fabrica-check-done "\$NUM" \|\| fabrica-release "\$NUM" --needs-human/,
     );
+  });
+
+  // El gate se rinde dejando `.factory/gate-gave-up`; prohibir el PR es solo
+  // texto de las reglas.
+  it("si el Stop gate se rindió, la issue va a needs-human aunque haya PR", () => {
+    const net = steps.find((s) => s.run?.includes("fabrica-check-done"));
+
+    expect(net?.run).toMatch(
+      /if \[ -f \.factory\/gate-gave-up \]; then\s+fabrica-release "\$NUM" --needs-human/,
+    );
+  });
+
+  // Un job cancelado por su tope no corre ni el paso de success() ni el de
+  // failure(): la issue quedaba en in-progress para siempre, sin comentario.
+  it("si la corrida falla o se cancela, libera la issue como needs-human", () => {
+    const note = steps.find((s) => s.if?.includes("failure()"));
+
+    expect(note?.if).toMatch(/cancelled\(\)/);
+    expect(note?.run).toMatch(/fabrica-release "\$NUM" --needs-human/);
+    expect(note?.run).toContain("actions/runs/$GITHUB_RUN_ID");
+  });
+
+  it("el agente tiene su propio tope, por debajo del del job, para que el aviso alcance a correr", () => {
+    const job = Object.values(workflow.jobs)[0];
+
+    expect(agent?.["timeout-minutes"]).toBeGreaterThan(0);
+    expect(agent!["timeout-minutes"]!).toBeLessThan(job["timeout-minutes"]!);
   });
 
   it("sube la transcripción del agente como artefacto, aunque la corrida falle", () => {

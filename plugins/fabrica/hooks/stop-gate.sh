@@ -101,10 +101,12 @@ Revert those changes (git checkout origin/<base> -- <file>, then commit). If the
 fi
 
 # Review-only guard: if the session changed nothing beyond generated noise
-# (clean tree modulo GENERATED_NOISE_FILES, no commits beyond upstream),
+# (clean tree modulo GENERATED_NOISE_FILES) and HEAD is already verified,
 # there is nothing to verify. Don't run the full suite just to end a Q&A
-# session. Any failure to determine "ahead" counts as ahead, so worker
-# sessions with local commits always get checked. Some dev servers rewrite
+# session. HEAD counts as verified if the gate already passed on it, or if it
+# has no commits beyond the base. Pushing does not verify anything: a worker
+# pushes before its last Stop, so "nothing beyond upstream" would skip the
+# checks on the normal path. Some dev servers rewrite
 # files on every run (`next dev` does it to tsconfig.json and to the CLAUDE.md
 # agent block), and `npm install` rewrites package-lock.json, so without this
 # allowance the first gate run in a session dirties the tree and the guard can
@@ -135,32 +137,45 @@ only_generated_noise_is_dirty() {
   return 0
 }
 
-if only_generated_noise_is_dirty; then
-  AHEAD=$(git rev-list --count '@{upstream}..HEAD' 2>/dev/null || echo "?")
-  if [ "$AHEAD" = "0" ]; then
-    rm -f "$COUNTER_FILE"
-    exit 0
-  fi
+# El sha que pasó el gate vive en el git-dir del worktree: nunca ensucia el
+# árbol ni viaja con la rama.
+PASSED_FILE=$(git rev-parse --git-path fabrica-gate-passed 2>/dev/null || true)
+
+head_already_verified() {
+  local head base ahead
+  head=$(git rev-parse HEAD 2>/dev/null) || return 1
+  [ -n "$PASSED_FILE" ] && [ "$(cat "$PASSED_FILE" 2>/dev/null)" = "$head" ] && return 0
+  base=$(factory_read_value baseBranch 2>/dev/null)
+  base="${base:-main}"
+  ahead=$(git rev-list --count "origin/$base..HEAD" 2>/dev/null) || return 1
+  [ "$ahead" = "0" ]
+}
+
+if only_generated_noise_is_dirty && head_already_verified; then
+  rm -f "$COUNTER_FILE"
+  exit 0
 fi
 
 # Planning guard: a spec branch (fabrica:spec, plan, tasks) only changes
 # specs/ and docs/plan-maestro.md. There is no code to verify, and a red main
 # must not block writing a spec. Everything that changed since the branch left
 # the base (commits, edits and new files) has to be planning or generated
-# noise; anything else runs the full gate. Without origin/<base> it does not
-# apply.
+# noise, with at least one planning file: a branch that only changes
+# tsconfig.json or the lockfile changes what the checks verify, so it runs the
+# full gate. Without origin/<base> it does not apply.
 only_planning_changes() {
-  local changed file
+  local changed file planning=""
   changed=$(changed_since_base)
   [ -n "$changed" ] || return 1
   while IFS= read -r file; do
     case "$file" in
+      specs/* | docs/plan-maestro.md) planning=1 ;;
       # .gitignore: `fabrica-setup speckit` adds .specify/ to it.
-      specs/* | docs/plan-maestro.md | .gitignore) ;;
+      .gitignore) ;;
       *) is_generated_noise_file "$file" || return 1 ;;
     esac
   done <<<"$changed"
-  return 0
+  [ -n "$planning" ]
 }
 
 if only_planning_changes; then
@@ -209,4 +224,9 @@ run_check test "Tests"
 run_check e2e "E2E (visual/a11y)"
 
 rm -f "$COUNTER_FILE"
+# Solo un árbol limpio deja HEAD como verificado: con cambios sin commitear,
+# lo que pasó no es lo que está en HEAD.
+if [ -n "$PASSED_FILE" ] && only_generated_noise_is_dirty; then
+  git rev-parse HEAD > "$PASSED_FILE" 2>/dev/null || true
+fi
 exit 0

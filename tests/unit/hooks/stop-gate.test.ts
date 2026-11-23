@@ -857,6 +857,90 @@ describe("guard de árbol limpio", () => {
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
 
+  // En `claude -p` el Stop solo se dispara al final, cuando el worker ya hizo
+  // push: si el gate se salta todo con el árbol limpio y nada por delante de
+  // upstream, no verifica nunca el camino normal (revisión del 2026-11-23).
+  it(
+    "en una rama impl-N ya pusheada corre los checks",
+    async () => {
+      ({ workDir, originDir } = await createFixtureRepo());
+      const { code: prepared, stderr } = await runBashScript(
+        workDir,
+        `set -e
+         git checkout -q -b impl-7
+         echo 'export const foo = 2;' > src/lib/foo.ts
+         git commit -qam codigo
+         git push -q -u origin impl-7`,
+      );
+      expect(prepared, stderr).toBe(0);
+      const { binDir, markerFile } = await installChecksRanMarkerBin();
+      stubBinDir = binDir;
+
+      const { code } = await runStopGate(workDir, {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      });
+
+      expect(code).toBe(0);
+      expect(await checksRan(markerFile)).toBe(true);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "lo que ya pasó no se vuelve a verificar mientras no cambie",
+    async () => {
+      ({ workDir, originDir } = await createFixtureRepo());
+      await runBashScript(
+        workDir,
+        `set -e
+         git checkout -q -b impl-7
+         echo 'export const foo = 2;' > src/lib/foo.ts
+         git commit -qam codigo
+         git push -q -u origin impl-7`,
+      );
+      const { binDir, markerFile } = await installChecksRanMarkerBin();
+      stubBinDir = binDir;
+      const env = {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      };
+
+      await runStopGate(workDir, env);
+      expect(await checksRan(markerFile)).toBe(true);
+      await rm(markerFile);
+      const { code } = await runStopGate(workDir, env);
+
+      expect(code).toBe(0);
+      expect(await checksRan(markerFile)).toBe(false);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it.each(["tsconfig.json", "package-lock.json"])(
+    "una rama que solo cambia %s corre los checks: cambia lo que verifican",
+    async (noiseFile) => {
+      ({ workDir, originDir } = await createFixtureRepo());
+      await runBashScript(
+        workDir,
+        `set -e
+         git checkout -q -b impl-7
+         echo '{"compilerOptions": {"strict": true}}' > ${noiseFile}
+         git commit -qam ajuste`,
+      );
+      const { binDir, markerFile } = await installChecksRanMarkerBin();
+      stubBinDir = binDir;
+
+      await runStopGate(workDir, {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      });
+
+      expect(await checksRan(markerFile)).toBe(true);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
   it(
     "si la rama de planeación también toca código, corre los checks",
     async () => {

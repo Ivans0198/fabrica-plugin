@@ -306,7 +306,8 @@ is no board) alongside the label and the comment.
 - **The Stop gate gave up** (it blocked the maximum number of times and let you
   stop; it leaves `.factory/gate-gave-up`): you are FORBIDDEN from opening a PR
   or marking one ready. Label the issue `needs-human` and comment which checks
-  are still red.
+  are still red. `fabrica-backlog` and the cloud run check that trace after
+  you stop: the issue goes to `needs-human` even if a PR exists.
 - **Integration tests without credentials in the cloud:** if the runner lacks
   the app's env vars and the ticket does not depend on those services, you may
   skip those tests declaring "⚠ integration tests not run in CI" in the PR. If

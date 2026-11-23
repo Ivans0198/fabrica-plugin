@@ -184,9 +184,18 @@ check_worker_left_no_pr() {  # issue number
   [ "$state" = "CLOSED" ] && return 0   # closed by idempotency: no PR is correct
   labels=$(echo "$info" | jq -r '.labels[].name')
   echo "$labels" | grep -qx "in-progress" || return 0
+  wt_dir=$(worktree_dir_for "$n")
+  # Las reglas prohíben el PR cuando el Stop gate se rinde, pero eso es texto:
+  # si el worker lo abrió igual, no cuenta como éxito.
+  if [ -f "$wt_dir/.factory/gate-gave-up" ]; then
+    echo "⚠ El Stop gate se rindió en #$n: needs-human aunque haya PR"
+    flag_needs_human "$n" "🤖 **El Stop gate se rindió** después de agotar los ciclos de corrección: lint, tipos o tests siguen en rojo en la rama \`impl-$n\`. Si hay un PR, no lo mergees así.
+
+Revisa el worktree \`impl-$n\`, arregla lo que falla o ajusta la issue, y retómala con \`/fabrica:backlog $n\`."
+    return 0
+  fi
   pr_declares_closes "$n" && return 0
 
-  wt_dir=$(worktree_dir_for "$n")
   last_commit=$(git -C "$wt_dir" log --oneline -1 2>/dev/null || echo "sin commits")
   dirty_count=$(dirty_file_count "$wt_dir")
 
