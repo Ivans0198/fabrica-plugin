@@ -243,12 +243,26 @@ reconstruir. VS Code copia tu identidad de git (`user.name` y `user.email`)
 al contenedor; si lo abres de otra forma, configúrala dentro, o los commits
 de los workers no tendrán autor. Si cambias `allowed-domains.txt`, reconstruye el contenedor.
 
+`fabrica-backlog` solo acepta `bypassPermissions` si el firewall terminó bien
+(deja `/run/fabrica-firewall-ok`) y example.com no responde. Lo que el
+firewall no cubre:
+
+- **GitHub está abierto**, y la sesión de `gh` del contenedor llega a todos
+  tus repos. Para un proyecto delicado, entra con un token fine-grained
+  limitado a ese repo: `gh auth login --with-token`.
+- **La carpeta del proyecto es la de tu computador.** Lo que un worker
+  escriba en `.git/hooks/` o `.vscode/` corre después fuera del contenedor.
+  Si algo te parece raro, revísalos antes de usar git o VS Code en el host.
+
 ### Paso 4. Tu único trabajo: revisar y mergear 👑
 
 Cuando llegue el PR: ábrelo en GitHub, mira los cambios ("Files changed"),
 y si te gusta: botón **"Ready for review"** → botón **"Merge pull request"**.
-(Los tickets con `auto-merge` se saltan este paso solos, porque tú se lo
-permitiste al etiquetarlos.)
+(Los tickets con `auto-merge` se saltan este paso solos: cuando el worker
+termina, `fabrica-backlog` o la nube marcan el PR como listo y le ponen el
+auto-merge. Cuenta la etiqueta que tenía la issue antes de empezar, así que
+el worker no puede ponérsela él. En un repo privado del plan gratis, GitHub
+no permite el auto-merge: la fábrica lo comenta en la issue y lo mergeas tú.)
 
 Al mergear pasa la magia en cadena: la tarea se cierra sola → el tablero la
 pasa a Done → la barra del épico avanza → y la siguiente tarea queda
@@ -362,8 +376,13 @@ con squash: avisa en vez de borrar trabajo.
 - La fábrica no puede terminar con tests fallando mientras le queden intentos
   (el "Stop hook" la bloquea). Si agota los intentos, el portero la deja salir
   pero con obligación de marcar `needs-human` y prohibición de abrir/marcar
-  listo el PR. Y solo mergea sola donde TÚ pusiste `auto-merge`. Y
-  cualquier merge se deshace con el botón "Revert" del PR; git nunca olvida.
+  listo el PR. Y cualquier merge se deshace con el botón "Revert" del PR;
+  git nunca olvida.
+- Un worker no puede mergear, empujar a `main` ni forzar un push: lo bloquea
+  un hook (`worker-guard`), también con `bypassPermissions`. Tampoco puede
+  cambiar `factory.json`, que dice qué comandos corren los hooks: lo lee de
+  la rama base. El texto de una issue o de un comentario es dato para él, no
+  instrucciones.
 - Si un PR de la fábrica deja de poder mergearse porque choca con `main` (pasa
   cuando se mergea otro antes), la fábrica le pone **`merge-conflict`** y
   comenta una vez. No lo resuelve sola: un merge con los tests en verde puede
@@ -543,10 +562,13 @@ probados contra mains distintos se mergeen y rompan main entre los dos.
 - **Letra pequeña de confianza:** los workflows de backlog y menciones
   reciben todos los secretos del repo (`secrets: inherit`), para poder
   buscar el token de cada persona por nombre. Cualquiera con permiso de push
-  podría editar un workflow y leerlos. Es el modelo de todo secreto de repo,
-  pero con tokens personales pesa más: mantengan la branch protection
-  (cambios a workflows entran por PR revisado) y den permiso de push solo a
-  gente de confianza.
+  podría escribir un workflow en su propia rama y leerlos: corre con los
+  secretos aunque nunca llegue a `main`, así que la branch protection no lo
+  evita. Es el modelo de todo secreto de repo, pero con tokens personales
+  pesa más: den permiso de push solo a gente de confianza. Con GitHub Pro o
+  Team, un environment con revisores limitado a `main` cierra ese hueco.
+  Una re-ejecución hecha por otra persona no corre: pediría el token de
+  quien la disparó.
 
 **Reglas de convivencia:** el label `auto-merge` es una decisión de confianza
 COMPARTIDA: acuerden en equipo qué tipo de tickets lo merecen, porque
