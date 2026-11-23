@@ -431,6 +431,53 @@ describe.each(READERS)("comandos de factory.json (lector: %s)", (reader) => {
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
 
+  // Una suite roja grande llenaba el contexto del worker con toda su salida
+  // (revisión del 2026-11-23): van las últimas líneas y el resto a un log.
+  it(
+    "manda solo el final de la salida de un check que falla, y la guarda entera",
+    async () => {
+      await prepare(() => ({
+        test: [
+          "node",
+          "-e",
+          "for (let i = 1; i <= 1000; i++) console.log('linea ' + i); process.exit(1)",
+        ],
+      }));
+
+      const { code, stderr } = await runGate();
+
+      expect(code).toBe(2);
+      expect(stderr).toContain("linea 1000");
+      expect(stderr).not.toContain("linea 1\n");
+      expect(stderr).toContain(".factory/state/gate-test.log");
+      const log = await readFile(
+        path.join(workDir, ".factory/state/gate-test.log"),
+        "utf8",
+      );
+      expect(log).toContain("linea 1\n");
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "un check que se pasa de su plazo cuenta como fallido",
+    async () => {
+      await prepare(() => ({ test: ["sleep", "5"] }));
+
+      const start = Date.now();
+      const { code, stderr } = await runStopGate(workDir, {
+        ...process.env,
+        FACTORY_JSON_READER: reader,
+        FACTORY_CHECK_TIMEOUT: "1",
+      });
+
+      expect(code).toBe(2);
+      expect(stderr).toMatch(/plazo|timed out/i);
+      expect(Date.now() - start).toBeLessThan(4000);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
   it(
     "bloquea y suma un intento cuando el comando falla",
     async () => {

@@ -200,8 +200,16 @@ fi
 # Corre commands.<name> de factory.json y bloquea si falla. Un comando en null
 # no se corre. Si factory.json está mal, eso también bloquea: un gate que no
 # puede leer qué verificar no puede dejar pasar nada.
+#
+# Cada check tiene plazo: lo que queda de GATE_BUDGET, por debajo de los 600 s
+# del hook en hooks.json, para que un check colgado bloquee en vez de que el
+# hook se corte. Si falla, Claude recibe las últimas OUTPUT_TAIL líneas, y la
+# salida entera queda en .factory/state/gate-<check>.log: una suite roja
+# grande llenaba el contexto.
+GATE_BUDGET=570
+OUTPUT_TAIL=150
 run_check() {
-  local name="$1" label="$2" status output
+  local name="$1" label="$2" status out log limit runner=() why=""
   factory_read_command "$name"
   status=$?
   if [ "$status" -eq 3 ]; then
@@ -210,10 +218,20 @@ run_check() {
   if [ "$status" -ne 0 ]; then
     fail "❌ $FACTORY_ERROR"
   fi
-  if ! output=$("${FACTORY_CMD[@]}" 2>&1 < /dev/null); then
-    fail "❌ $label failed (${FACTORY_CMD[*]}). Fix before finishing:
-$output"
+  limit="${FACTORY_CHECK_TIMEOUT:-$((GATE_BUDGET - SECONDS))}"
+  [ "$limit" -gt 0 ] || fail "❌ $label did not run: the Stop gate ran out of time (${GATE_BUDGET}s). Make the checks faster."
+  command -v timeout >/dev/null 2>&1 && runner=(timeout --kill-after=5 "$limit")
+  out=$(mktemp)
+  "${runner[@]}" "${FACTORY_CMD[@]}" > "$out" 2>&1 < /dev/null
+  status=$?
+  if [ "$status" -ne 0 ]; then
+    log=".factory/state/gate-$name.log"
+    mkdir -p .factory/state && mv "$out" "$log"
+    [ "$status" -eq 124 ] && why=" timed out after ${limit}s (plazo del Stop gate)"
+    fail "❌ $label failed (${FACTORY_CMD[*]})$why. Fix before finishing. Last $OUTPUT_TAIL lines (full output in $log):
+$(tail -n "$OUTPUT_TAIL" "$log")"
   fi
+  rm -f "$out"
 }
 
 # 0. The format rules are read by the post-edit hook, which never blocks; a
