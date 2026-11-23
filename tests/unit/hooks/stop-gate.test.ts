@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { pluginFile } from "../../support/plugin-paths";
 
 const STOP_GATE_SCRIPT = pluginFile(".claude/hooks/stop-gate.sh");
+const SESSION_START_SCRIPT = pluginFile(".claude/hooks/session-start.sh");
 
 /**
  * Estos tests lanzan bash y git de verdad, no los imitan. Bajo `npm test`
@@ -523,12 +524,17 @@ interface BashScriptResult {
   stderr: string;
 }
 
-function runBashScript(cwd: string, script: string): Promise<BashScriptResult> {
+function runBashScript(
+  cwd: string,
+  script: string,
+  input?: string,
+): Promise<BashScriptResult> {
   return new Promise((resolve, reject) => {
     const child = spawn("bash", ["-c", script], {
       cwd,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"],
     });
+    if (input !== undefined) child.stdin!.end(input);
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", (chunk: Buffer) => {
@@ -887,6 +893,49 @@ describe("guard de árbol limpio", () => {
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
 
+  // Una pregunta en un PR (una mención, una sesión que solo lee) no cambia
+  // nada: verificar la rama entera la atraparía en los checks de otro.
+  it(
+    "una sesión que no cambió nada desde que empezó no corre los checks",
+    async () => {
+      ({ workDir, originDir } = await createFixtureRepo());
+      await runBashScript(
+        workDir,
+        `set -e
+         git checkout -q -b impl-7
+         echo 'export const foo = 2;' > src/lib/foo.ts
+         git commit -qam codigo
+         git push -q -u origin impl-7`,
+      );
+      const start = await runBashScript(
+        workDir,
+        `bash "${toBashPath(SESSION_START_SCRIPT)}"`,
+        JSON.stringify({ session_id: "abc-123", cwd: workDir }),
+      );
+      expect(start.code, start.stderr).toBe(0);
+      const { binDir, markerFile } = await installChecksRanMarkerBin();
+      stubBinDir = binDir;
+      const env = {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      };
+
+      await runStopGate(workDir, env, {
+        session_id: "abc-123",
+        cwd: workDir,
+      });
+      expect(await checksRan(markerFile)).toBe(false);
+
+      await runBashScript(
+        workDir,
+        "echo 'export const foo = 3;' > src/lib/foo.ts && git commit -qam otro",
+      );
+      await runStopGate(workDir, env, { session_id: "abc-123", cwd: workDir });
+      expect(await checksRan(markerFile)).toBe(true);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
   it(
     "lo que ya pasó no se vuelve a verificar mientras no cambie",
     async () => {
@@ -1034,7 +1083,10 @@ describe("guard de árbol limpio", () => {
 });
 
 describe("workflows", () => {
-  it("claude-mentions.yml define FACTORY_GATE=off y claude-backlog.yml no", async () => {
+  // Una mención en la nube tiene permiso de escribir código: con el gate
+  // apagado, lo que commiteara no se verificaba. Ahora el gate solo mira lo
+  // que cambie la sesión (revisión del 2026-11-23).
+  it("ningún workflow apaga el Stop gate", async () => {
     const mentionsYml = await readFile(
       pluginFile(".github/workflows/claude-mentions.yml"),
       "utf8",
@@ -1044,7 +1096,7 @@ describe("workflows", () => {
       "utf8",
     );
 
-    expect(mentionsYml).toMatch(/FACTORY_GATE:\s*["']?off["']?/);
+    expect(mentionsYml).not.toMatch(/FACTORY_GATE/);
     expect(backlogYml).not.toMatch(/FACTORY_GATE/);
   });
 });

@@ -188,6 +188,15 @@ describe("planeación con Spec Kit", () => {
     expect(rules).toMatch(/named in their OK/);
   });
 
+  // Los scripts usan factory.json → baseBranch; con base develop, las reglas
+  // rebaseaban sobre main y le daban al revisor otro merge-base.
+  it("las reglas no fijan main como base: usan la de factory.json", () => {
+    const rules = read("rules/fabrica.md");
+
+    expect(rules).not.toContain("origin/main");
+    expect(rules).toMatch(/`<base>` is `factory\.json` → `baseBranch`/);
+  });
+
   it("el PR de la spec nunca cierra la épica", () => {
     const spec = read("skills/spec/SKILL.md");
 

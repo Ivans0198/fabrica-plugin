@@ -188,7 +188,8 @@ Execute these steps IN ORDER:
    every time a piece is green (tests passing, lint and types clean), commit
    it before starting the next one. The turn budget can run out without
    warning, and uncommitted work is lost work. Before opening the PR, sync
-   with main: `git fetch origin && git rebase origin/main`.
+   with the base: `git fetch origin && git rebase origin/<base>`, where
+   `<base>` is `factory.json` → `baseBranch` (`main` if missing).
 
 5. **Review**: launch `fabrica:code-reviewer` (and `fabrica:ui-reviewer` ONLY when the UI-review
    policy in `factory.json` → `review.uiReview` applies; see Definition of
@@ -197,7 +198,7 @@ Execute these steps IN ORDER:
      (`models.uiReviewer` for the ui-reviewer). If the key is missing, do not
      pass `model`.
    - **What it gets:** commit first, then give it only the issue number, the
-     base commit (`git merge-base origin/main HEAD`), the round number and,
+     base commit (`git merge-base origin/<base> HEAD`), the round number and,
      from round 2, the path of the previous report and the commit that round
      reviewed. Never your opinion of the code: it checks for itself.
    - **What you keep:** save each reply verbatim to

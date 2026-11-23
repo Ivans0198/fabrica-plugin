@@ -13,11 +13,10 @@ set -o pipefail
 # shellcheck source=../../scripts/lib/factory-config.sh
 source "$(dirname "${BASH_SOURCE[0]}")/../scripts/lib/factory-config.sh"
 
-# Kill switch: sessions that only answer questions (e.g. @claude mentions that
-# just reply in a thread) never produce code, so verifying them with lint,
-# types and tests protects nothing, it only traps them. Exit before touching
-# the retry counter file, so a worker session running in parallel keeps its
-# own count untouched.
+# Kill switch, for a person who needs to stop the gate by hand. No workflow
+# uses it: a session that changes nothing is already skipped below
+# (hooks/session-start.sh). Exit before touching the retry counter file, so a
+# worker session running in parallel keeps its own count untouched.
 if [ "${FACTORY_GATE:-}" = "off" ]; then
   exit 0
 fi
@@ -28,8 +27,12 @@ fi
 # ahí CLAUDE_PROJECT_DIR sigue en la raíz, y solo el cwd de la entrada del
 # hook dice dónde está. Ese cwd vale solo si queda dentro del proyecto.
 ROOT="${CLAUDE_PROJECT_DIR:-}"
+SESSION_ID=""
 if [ ! -t 0 ] && command -v jq >/dev/null 2>&1; then
-  hook_cwd=$(jq -r '.cwd // empty' 2>/dev/null || true)
+  hook_input=$(cat)
+  SESSION_ID=$(printf '%s' "$hook_input" | jq -r '.session_id // empty' 2>/dev/null || true)
+  [[ "$SESSION_ID" =~ ^[A-Za-z0-9_-]+$ ]] || SESSION_ID=""
+  hook_cwd=$(printf '%s' "$hook_input" | jq -r '.cwd // empty' 2>/dev/null || true)
   if [ -n "$hook_cwd" ] && [ -d "$hook_cwd" ]; then
     hook_top=$(git -C "$hook_cwd" rev-parse --show-toplevel 2>/dev/null || true)
     case "$hook_top/" in
@@ -103,7 +106,8 @@ fi
 # Review-only guard: if the session changed nothing beyond generated noise
 # (clean tree modulo GENERATED_NOISE_FILES) and HEAD is already verified,
 # there is nothing to verify. Don't run the full suite just to end a Q&A
-# session. HEAD counts as verified if the gate already passed on it, or if it
+# session. HEAD counts as verified if the gate already passed on it, if the
+# session has not moved it since it started (hooks/session-start.sh), or if it
 # has no commits beyond the base. Pushing does not verify anything: a worker
 # pushes before its last Stop, so "nothing beyond upstream" would skip the
 # checks on the normal path. Some dev servers rewrite
@@ -142,9 +146,13 @@ only_generated_noise_is_dirty() {
 PASSED_FILE=$(git rev-parse --git-path fabrica-gate-passed 2>/dev/null || true)
 
 head_already_verified() {
-  local head base ahead
+  local head base ahead start
   head=$(git rev-parse HEAD 2>/dev/null) || return 1
   [ -n "$PASSED_FILE" ] && [ "$(cat "$PASSED_FILE" 2>/dev/null)" = "$head" ] && return 0
+  if [ -n "$SESSION_ID" ]; then
+    start=$(cat "$(git rev-parse --git-path "fabrica-session-$SESSION_ID" 2>/dev/null)" 2>/dev/null)
+    [ "$start" = "$head" ] && return 0
+  fi
   base=$(factory_read_value baseBranch 2>/dev/null)
   base="${base:-main}"
   ahead=$(git rev-list --count "origin/$base..HEAD" 2>/dev/null) || return 1
