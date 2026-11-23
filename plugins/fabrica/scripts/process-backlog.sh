@@ -38,6 +38,19 @@ if [ "$PERMISSION_MODE" = bypassPermissions ] \
   echo "❌ PERMISSION_MODE=bypassPermissions solo corre dentro de un contenedor. Ábrelo con el de fabrica-devcontainer, o usa PERMISSION_MODE=auto" >&2
   exit 1
 fi
+# Dentro del contenedor, el firewall tiene que estar arriba: init-firewall.sh
+# deja la marca solo si terminó bien, y la red se prueba en el momento (la
+# marca sobrevive a un reinicio sin postStartCommand).
+if [ "$PERMISSION_MODE" = bypassPermissions ]; then
+  if [ ! -f "${FABRICA_FIREWALL_MARK:-/run/fabrica-firewall-ok}" ]; then
+    echo "❌ El firewall del contenedor no está arriba: corre sudo /usr/local/bin/init-firewall.sh, o usa PERMISSION_MODE=auto" >&2
+    exit 1
+  fi
+  if curl --connect-timeout 3 -s -o /dev/null https://example.com 2>/dev/null; then
+    echo "❌ La red deja salir a example.com: el firewall no está cerrando. Corre sudo /usr/local/bin/init-firewall.sh, o usa PERMISSION_MODE=auto" >&2
+    exit 1
+  fi
+fi
 # shellcheck source=lib/factory-config.sh
 source "$SCRIPT_DIR/lib/factory-config.sh"
 WORKER_MODEL="${WORKER_MODEL:-$(factory_read_model worker sonnet)}"
@@ -231,6 +244,18 @@ y después, en Claude, \`/fabrica:backlog\`. El nuevo worker puede continuar des
   fi
 }
 
+# El auto-merge lo pone el orquestador, no el worker. Cuenta la etiqueta que
+# tenía la issue antes de lanzarlo: si el agente se la pusiera él mismo, no
+# vale. Tampoco si el Stop gate se rindió o la issue terminó en needs-human.
+maybe_automerge() {  # issue number, labels at start (one per line)
+  local n="$1" now
+  printf '%s\n' "$2" | grep -qx auto-merge || return 0
+  [ -f "$(worktree_dir_for "$n")/.factory/gate-gave-up" ] && return 0
+  now=$(gh issue view "$n" --json labels -q '.labels[].name' 2>/dev/null) || return 0
+  printf '%s\n' "$now" | grep -qx needs-human && return 0
+  automerge_issue "$n" || true
+}
+
 # Launches the worker for issue $1 in the background and sets WORKER_PID.
 # Pulled out of main() so tests can drive it directly against a fake `claude`.
 run_worker() {
@@ -248,6 +273,8 @@ run_worker() {
     # revisor, termina su turno esperando la notificación y `claude -p` se
     # cierra sin la respuesta (probado el 2026-11-16).
     export CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
+    # hooks/worker-guard.sh: un worker no mergea ni empuja a la rama base.
+    export FABRICA_WORKER=1
     exec claude -p "$(bash "$SCRIPT_DIR/worker-prompt.sh" one "$n")" \
       --permission-mode "$PERMISSION_MODE" \
       --max-turns "$MAX_TURNS" \
@@ -289,6 +316,7 @@ main() {
     fi
 
     # Deterministic bookkeeping: don't rely on the worker remembering to do it.
+    START_LABELS=$(gh issue view "$N" --json labels -q '.labels[].name' 2>/dev/null || true)
     mark_in_progress "$N"
 
     run_worker "$N"
@@ -357,6 +385,7 @@ main() {
       WORKER_EXIT_CODE=$?
     fi
     handle_worker_exit "$N" "$WORKER_EXIT_CODE"
+    [ "$WORKER_EXIT_CODE" -eq 0 ] && maybe_automerge "$N" "$START_LABELS"
     TICKET_OUTCOME_RECORDED=1
 
     PROCESSED=$((PROCESSED + 1))

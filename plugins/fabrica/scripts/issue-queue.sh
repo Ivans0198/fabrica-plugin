@@ -10,9 +10,10 @@
 #   issue-queue.sh done N                       ¿N ya tiene un PR que la cierre?
 #   issue-queue.sh cleanup [--dry-run]          borra worktrees de issues cerradas
 #   issue-queue.sh eligible N --actor U         ¿la nube puede tomar N por pedido de U?
+#   issue-queue.sh automerge N                  auto-merge en el PR de N, si tiene la etiqueta
 #
 # Los llaman fabrica-next-issue, fabrica-claim, fabrica-release,
-# fabrica-check-done, fabrica-cleanup y fabrica-eligible. La salida útil va a stdout; los avisos, a stderr.
+# fabrica-check-done, fabrica-cleanup, fabrica-eligible y fabrica-automerge. La salida útil va a stdout; los avisos, a stderr.
 
 set -euo pipefail
 
@@ -101,6 +102,12 @@ case "${1:-}" in
       --dry-run) cleanup_worktrees dry-run ;;
       *) usage ;;
     esac
+    ;;
+  automerge)
+    n=$(issue_number "${2:-}")
+    rc=0
+    automerge_issue "$n" || rc=$?
+    exit "$rc"
     ;;
   done)
     n=$(issue_number "${2:-}")

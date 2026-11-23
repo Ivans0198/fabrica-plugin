@@ -230,6 +230,33 @@ pr_declares_closes() {  # issue number
   [ "${count:-0}" != "0" ]
 }
 
+# Pasa a listo el PR abierto de impl-N y le pone el auto-merge, solo si la
+# issue tiene la etiqueta auto-merge. Lo llaman fabrica-backlog y la nube
+# después del agente, nunca el worker: hooks/worker-guard.sh le bloquea
+# `gh pr merge`. Sale con 2 sin la etiqueta y con 1 si no se pudo (y lo
+# comenta en la issue).
+automerge_issue() {  # issue number
+  local n="$1" labels pr err
+  if [ "${FABRICA_WORKER:-}" = 1 ]; then
+    echo "❌ Un worker no pone el auto-merge: lo pone fabrica-backlog o la nube al terminar." >&2
+    return 1
+  fi
+  labels=$(gh issue view "$n" --json labels -q '.labels[].name') || { echo "❌ No pude leer #$n con gh." >&2; return 1; }
+  printf '%s\n' "$labels" | grep -qx auto-merge || { echo "#$n no tiene la etiqueta auto-merge." >&2; return 2; }
+  pr=$(gh pr list --head "impl-$n" --state open --json number -q '.[0].number' 2>/dev/null)
+  if [ -z "$pr" ]; then
+    echo "❌ #$n no tiene un PR abierto desde impl-$n." >&2
+    return 1
+  fi
+  if err=$(gh pr ready "$pr" 2>&1 && gh pr merge "$pr" --auto --squash 2>&1); then
+    echo "✅ PR #$pr listo y con auto-merge: se mergea cuando pasen sus checks."
+    return 0
+  fi
+  gh issue comment "$n" --body "🤖 **No se pudo poner el auto-merge** en el PR #$pr: $err. Si el repo es privado en el plan gratis, GitHub no lo permite: mergéalo a mano cuando esté en verde." || true
+  echo "❌ No se pudo poner el auto-merge en el PR #$pr: $err" >&2
+  return 1
+}
+
 # Single source of truth for where a worker's branch/worktree lives, so the
 # path template only needs to change in one place if the naming convention
 # does (see #62, which is expected to touch it).

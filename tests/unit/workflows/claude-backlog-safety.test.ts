@@ -76,6 +76,21 @@ describe("claude-backlog.yml después del agente", () => {
     expect(agent!["timeout-minutes"]!).toBeLessThan(job["timeout-minutes"]!);
   });
 
+  // El agente no mergea (hooks/worker-guard.sh). Las etiquetas del evento son
+  // las de cuando se disparó la corrida: si el agente se pusiera auto-merge,
+  // no contaría.
+  it("el auto-merge lo pone el workflow después del agente, con las etiquetas del evento", () => {
+    const merge = steps.find((s) => s.run?.includes("fabrica-automerge"));
+    const net = steps.findIndex((s) => s.run?.includes("fabrica-check-done"));
+
+    expect(merge?.if).toContain(
+      "contains(github.event.issue.labels.*.name, 'auto-merge')",
+    );
+    expect(merge?.if).toMatch(/success\(\)/);
+    expect(merge?.run).toMatch(/\.factory\/gate-gave-up/);
+    expect(steps.indexOf(merge!)).toBeGreaterThan(net);
+  });
+
   it("sube la transcripción del agente como artefacto, aunque la corrida falle", () => {
     const upload = steps.find((s) =>
       s.uses?.startsWith("actions/upload-artifact"),

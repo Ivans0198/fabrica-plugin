@@ -161,6 +161,8 @@ jobs:
           # revisor, termina su turno esperando la notificación y la sesión se
           # cierra sin la respuesta (probado el 2026-11-16).
           CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
+          # hooks/worker-guard.sh: el agente no mergea ni empuja a la rama base.
+          FABRICA_WORKER: "1"
         with:
           # El runner no tiene el .env.local del proyecto. Si los tests de
           # integración necesitan servicios reales, sus valores van como
@@ -204,6 +206,19 @@ jobs:
           else
             fabrica-check-done "$NUM" || fabrica-release "$NUM" --needs-human "La corrida en la nube terminó sin abrir un PR con \`Closes #$NUM\`. La transcripción del agente está en los artefactos de la corrida, en la pestaña Actions."
           fi
+
+      # El agente no mergea (hooks/worker-guard.sh): el auto-merge lo pone este
+      # paso. Las etiquetas del evento son las de cuando se disparó la
+      # corrida, así que una que el agente se pusiera no cuenta.
+      - name: Auto-merge si la issue lo tenía
+        if: steps.gate.outputs.skip != 'true' && success() && github.event_name == 'issues' && contains(github.event.issue.labels.*.name, 'auto-merge')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUM: ${{ github.event.issue.number }}
+        run: |
+          [ -f .factory/gate-gave-up ] && exit 0
+          gh issue view "$NUM" --json labels -q '.labels[].name' | grep -qx needs-human && exit 0
+          fabrica-automerge "$NUM" || true
 
       # Con fabrica-release la issue sale de in-progress y de la tarjeta en
       # curso, igual que en local. Si la corrida falló antes de instalar el

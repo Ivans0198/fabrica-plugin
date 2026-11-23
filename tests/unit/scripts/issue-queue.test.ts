@@ -95,12 +95,14 @@ case "$1 $2" in
       *state*) var="FAKE_STATE_$n"; echo "\${!var:-OPEN}" ;;
     esac ;;
   "pr list")
+    case "$*" in *--head*) echo "\${FAKE_HEAD_PR:-}"; exit 0 ;; esac
     # La búsqueda de GitHub tarda en ver un PR recién abierto: con
     # FAKE_SEARCH_LAG, --search todavía no lo encuentra y la lista sí.
     case "$*" in
       *--search*) if [ -n "\${FAKE_SEARCH_LAG:-}" ]; then echo 0; else echo "\${FAKE_PR_COUNT:-0}"; fi ;;
       *) echo "\${FAKE_PR_COUNT:-0}" ;;
     esac ;;
+  "pr merge") [ -n "\${FAKE_FAIL_MERGE:-}" ] && { echo "auto-merge no está habilitado" >&2; exit 1; } ;;
 esac
 exit 0
 `,
@@ -586,6 +588,83 @@ describe("comandos de la cola", () => {
 
   // La nube tomaba una issue con ready-for-dev aunque estuviera bloqueada o
   // asignada a otra persona: el disparo solo miraba el nombre de la etiqueta.
+  // Que el agente no mergee es un hook; el auto-merge lo pone el orquestador
+  // con este comando, nunca el worker (revisión del 2026-11-23).
+  describe("fabrica-automerge", () => {
+    it(
+      "con la etiqueta auto-merge, pasa el PR de impl-N a listo y le pone el auto-merge",
+      async () => {
+        const { repo, env } = await project();
+
+        const { code } = await run(["automerge", "5"], repo, {
+          ...env,
+          FAKE_LABELS_5: "auto-merge",
+          FAKE_HEAD_PR: "12",
+        });
+
+        expect(code).toBe(0);
+        const log = await calls();
+        expect(log).toMatch(/pr list --head impl-5/);
+        expect(log).toMatch(/pr ready 12/);
+        expect(log).toMatch(/pr merge 12 --auto --squash/);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      "sin la etiqueta no toca el PR",
+      async () => {
+        const { repo, env } = await project();
+
+        const { code } = await run(["automerge", "5"], repo, {
+          ...env,
+          FAKE_HEAD_PR: "12",
+        });
+
+        expect(code).toBe(2);
+        expect(await calls()).not.toMatch(/pr (ready|merge)/);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      "un worker no puede ponerlo",
+      async () => {
+        const { repo, env } = await project();
+
+        const { code, stderr } = await run(["automerge", "5"], repo, {
+          ...env,
+          FABRICA_WORKER: "1",
+          FAKE_LABELS_5: "auto-merge",
+          FAKE_HEAD_PR: "12",
+        });
+
+        expect(code).not.toBe(0);
+        expect(stderr).toMatch(/worker/i);
+        expect(await calls()).not.toMatch(/pr (ready|merge)/);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      "si GitHub no acepta el auto-merge, lo comenta en la issue y sale con 1",
+      async () => {
+        const { repo, env } = await project();
+
+        const { code } = await run(["automerge", "5"], repo, {
+          ...env,
+          FAKE_LABELS_5: "auto-merge",
+          FAKE_HEAD_PR: "12",
+          FAKE_FAIL_MERGE: "1",
+        });
+
+        expect(code).toBe(1);
+        expect(await calls()).toMatch(/issue comment 5 .*auto-merge/s);
+      },
+      TIMEOUT,
+    );
+  });
+
   describe("fabrica-eligible", () => {
     it(
       "da por elegible una issue libre y se la asigna a quien puso la etiqueta",
