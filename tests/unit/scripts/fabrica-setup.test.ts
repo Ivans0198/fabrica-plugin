@@ -527,6 +527,34 @@ describe("fabrica-setup check", () => {
   );
 
   it(
+    "avisa, sin fallar, si el firewall del dev container es de antes de la marca",
+    () => {
+      const dir = gitRepo();
+      setup(dir, ["init"]);
+      mkdirSync(path.join(dir, ".devcontainer"));
+      writeFileSync(
+        path.join(dir, ".devcontainer/init-firewall.sh"),
+        "#!/bin/bash\necho firewall viejo\n",
+      );
+
+      const old = setup(dir, ["check"]);
+
+      expect(old.code, old.out).toBe(0);
+      expect(old.out).toMatch(/fabrica-devcontainer --force/);
+
+      cpSync(
+        path.join(PLUGIN_ROOT, "templates/.devcontainer/init-firewall.sh"),
+        path.join(dir, ".devcontainer/init-firewall.sh"),
+      );
+      const fresh = setup(dir, ["check"]);
+
+      expect(fresh.code, fresh.out).toBe(0);
+      expect(fresh.out).not.toMatch(/fabrica-devcontainer/);
+    },
+    TIMEOUT,
+  );
+
+  it(
     "falla y manda a init cuando el proyecto no está iniciado",
     () => {
       const dir = gitRepo();

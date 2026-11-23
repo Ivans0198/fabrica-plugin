@@ -43,7 +43,7 @@ fi
 # marca sobrevive a un reinicio sin postStartCommand).
 if [ "$PERMISSION_MODE" = bypassPermissions ]; then
   if [ ! -f "${FABRICA_FIREWALL_MARK:-/run/fabrica-firewall-ok}" ]; then
-    echo "❌ El firewall del contenedor no está arriba: corre sudo /usr/local/bin/init-firewall.sh, o usa PERMISSION_MODE=auto" >&2
+    echo "❌ El firewall del contenedor no está arriba: corre sudo /usr/local/bin/init-firewall.sh, o usa PERMISSION_MODE=auto. Si ya lo corriste, tu .devcontainer/ es de antes de la 0.5.0 y su firewall no deja la marca: regenéralo con fabrica-devcontainer --force y reconstruye el contenedor" >&2
     exit 1
   fi
   if curl --connect-timeout 3 -s -o /dev/null https://example.com 2>/dev/null; then

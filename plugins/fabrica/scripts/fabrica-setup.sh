@@ -369,6 +369,16 @@ stale_pins() { # versión
   done < <(managed_files)
 }
 
+# El .devcontainer/ es del proyecto y refresh no lo toca. Uno escrito antes de
+# la 0.5.0 tiene un firewall que no deja la marca que fabrica-backlog exige
+# para correr con bypass: solo se avisa, el dev container es opcional.
+warn_old_devcontainer() {
+  local firewall=.devcontainer/init-firewall.sh
+  [ -f "$firewall" ] || return 0
+  grep -q fabrica-firewall-ok "$firewall" && return 0
+  echo "  ⚠ $firewall es de antes de la 0.5.0: fabrica-backlog no correrá con bypass dentro del contenedor. Regenéralo con fabrica-devcontainer --force (repite tus --feature y --domain), revisa el diff y reconstruye el contenedor."
+}
+
 cmd_check() {
   local want have pending stale
   want=$(plugin_version)
@@ -383,6 +393,7 @@ Pasa lo tuyo a cada .fabrica-new, reemplaza el archivo con él, borra el .fabric
   [ -z "$stale" ] || die "Estas llamadas a workflows no apuntan a v$want:
 $stale
 Corre fabrica-setup refresh y combina los .fabrica-new que deje."
+  warn_old_devcontainer
 }
 
 cmd_refresh() {
@@ -394,6 +405,7 @@ cmd_refresh() {
   refresh_attribution
   ensure_gitignore
   sync_managed "$version"
+  warn_old_devcontainer
 }
 
 # El stack de factory.json, validado: termina en un nombre de archivo.
