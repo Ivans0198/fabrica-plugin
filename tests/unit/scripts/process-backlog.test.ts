@@ -1958,6 +1958,35 @@ exit 0
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
 
+  // `claude plugin install --scope project` reescribe settings.json con las
+  // claves en otro orden: mismo contenido, otro texto. Dentro del dev
+  // container eso frenaba la fábrica (fabrica-prueba, 2026-11-23).
+  it(
+    "no para por un .json con el mismo contenido en otro orden o con otro formato",
+    async () => {
+      const binDir = await prepare(PLUGIN_VERSION);
+      await mkdir(path.join(workDir, ".claude"), { recursive: true });
+      await writeFile(
+        path.join(workDir, ".claude/settings.json"),
+        '{\n  "enabledPlugins": {"fabrica@fabrica-local": true},\n  "attribution": {"commit": ""}\n}\n',
+      );
+      await runBash(
+        "git add .claude/settings.json && git commit -q -m settings",
+        workDir,
+        process.env,
+      );
+      await writeFile(
+        path.join(workDir, ".claude/settings.json"),
+        '{"attribution": {"commit": ""}, "enabledPlugins": {"fabrica@fabrica-local": true}}\n',
+      );
+
+      const { code, stderr } = await check(binDir, [installed()]);
+
+      expect(code, stderr).toBe(0);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
   it(
     "con remoto, para si la configuración está commiteada pero no subida: el worktree sale de origin",
     async () => {

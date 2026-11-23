@@ -29,14 +29,28 @@ worker_base_ref() {
   if git rev-parse --verify -q "origin/$base" > /dev/null; then echo "origin/$base"; else echo HEAD; fi
 }
 
+# Un .json con el mismo contenido en otro orden o con otro formato le llega
+# igual al worker: no cuenta. `claude plugin install --scope project`
+# reescribe settings.json así.
+same_json() {  # ref, file
+  local base
+  base=$(git show "$1:$2" 2>/dev/null | jq -S . 2>/dev/null) || return 1
+  [ -n "$base" ] && [ "$base" = "$(jq -S . "$2" 2>/dev/null)" ]
+}
+
 uncommitted_setup() {
-  local ref
+  local ref file
   ref=$(worker_base_ref)
   {
-    git diff --name-only "$ref" -- "${WORKER_SETUP_PATHS[@]}" 2>/dev/null || true
+    { git diff --name-only "$ref" -- "${WORKER_SETUP_PATHS[@]}" 2>/dev/null || true; } | tr -d '\r' \
+      | while IFS= read -r file; do
+          case "$file" in *.json) [ -f "$file" ] && same_json "$ref" "$file" && continue ;; esac
+          printf '%s\n' "$file"
+        done
     git ls-files --others --exclude-standard -- "${WORKER_SETUP_PATHS[@]}" 2>/dev/null || true
   } | tr -d '\r' | sort -u
 }
+
 
 # Un worker `claude -p` carga el plugin solo si está instalado y habilitado
 # para el proyecto, y si no lo está corre sin Stop gate ni revisores sin
