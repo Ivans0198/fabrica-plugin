@@ -230,13 +230,20 @@ pr_declares_closes() {  # issue number
   [ "${count:-0}" != "0" ]
 }
 
-# Pasa a listo el PR abierto de impl-N y le pone el auto-merge, solo si la
-# issue tiene la etiqueta auto-merge. Lo llaman fabrica-backlog y la nube
-# después del agente, nunca el worker: hooks/worker-guard.sh le bloquea
-# `gh pr merge`. Sale con 2 sin la etiqueta y con 1 si no se pudo (y lo
-# comenta en la issue).
+# Mergea el PR abierto de impl-N cuando pasan sus checks, solo si la issue
+# tiene la etiqueta auto-merge. Lo llaman fabrica-backlog y la nube después
+# del agente, nunca el worker: hooks/worker-guard.sh le bloquea `gh pr merge`.
+#
+# No usa `gh pr merge --auto`: sin branch protection no hay checks
+# obligatorios, y --auto mergeaba al instante, antes de que terminaran
+# (fabrica-prueba #37, 2026-11-23). Espera los checks él mismo, hasta
+# FABRICA_AUTOMERGE_WAIT segundos, y exige que la rama tenga lo último de la
+# base: así lo que entra es justo lo que verificaron.
+#
+# Sale con 0 si mergeó, 2 sin la etiqueta y 1 si no mergeó (y lo comenta en
+# la issue).
 automerge_issue() {  # issue number
-  local n="$1" labels pr err
+  local n="$1" labels pr base head behind
   if [ "${FABRICA_WORKER:-}" = 1 ]; then
     echo "❌ Un worker no pone el auto-merge: lo pone fabrica-backlog o la nube al terminar." >&2
     return 1
@@ -248,13 +255,49 @@ automerge_issue() {  # issue number
     echo "❌ #$n no tiene un PR abierto desde impl-$n." >&2
     return 1
   fi
-  if err=$(gh pr ready "$pr" 2>&1 && gh pr merge "$pr" --auto --squash 2>&1); then
-    echo "✅ PR #$pr listo y con auto-merge: se mergea cuando pasen sus checks."
-    return 0
+  echo "⏳ Esperando los checks del PR #$pr para mergearlo..." >&2
+  automerge_wait_checks "$pr" || { automerge_refuse "$n" "$pr" "$AUTOMERGE_WHY"; return 1; }
+  read -r base head < <(gh pr view "$pr" --json baseRefName,headRefOid -q '.baseRefName + " " + .headRefOid')
+  behind=$(gh api "repos/{owner}/{repo}/compare/$base...$head" -q .behind_by 2>/dev/null)
+  if [ "${behind:-x}" != 0 ]; then
+    automerge_refuse "$n" "$pr" "la rama no tiene lo último de $base, así que sus checks no verificaron lo que entraría"
+    return 1
   fi
-  gh issue comment "$n" --body "🤖 **No se pudo poner el auto-merge** en el PR #$pr: $err. Si el repo es privado en el plan gratis, GitHub no lo permite: mergéalo a mano cuando esté en verde." || true
-  echo "❌ No se pudo poner el auto-merge en el PR #$pr: $err" >&2
-  return 1
+  if ! AUTOMERGE_WHY=$(gh pr ready "$pr" 2>&1 && gh pr merge "$pr" --squash 2>&1); then
+    automerge_refuse "$n" "$pr" "$AUTOMERGE_WHY"
+    return 1
+  fi
+  echo "✅ PR #$pr mergeado: sus checks pasaron."
+}
+
+# Espera a que terminen los checks del PR. 0 si todos pasan; si no, 1 y el
+# motivo en AUTOMERGE_WHY. Un PR recién abierto puede no tener checks todavía:
+# eso cuenta como pendiente hasta el plazo.
+automerge_wait_checks() {  # PR number
+  local pr="$1" out rc deadline=$((SECONDS + ${FABRICA_AUTOMERGE_WAIT:-1800}))
+  while :; do
+    out=$(gh pr checks "$pr" 2>&1)
+    rc=$?
+    case "$rc" in
+      0) return 0 ;;
+      8) AUTOMERGE_WHY="sus checks no terminaron en ${FABRICA_AUTOMERGE_WAIT:-1800} s" ;;
+      *)
+        if printf '%s' "$out" | grep -q "no checks reported"; then
+          AUTOMERGE_WHY="el PR no tiene checks: sin ellos no hay nada que confirme que está en verde"
+        else
+          AUTOMERGE_WHY="un check falló"
+          return 1
+        fi
+        ;;
+    esac
+    [ "$SECONDS" -lt "$deadline" ] || return 1
+    sleep "${FABRICA_AUTOMERGE_INTERVAL:-20}"
+  done
+}
+
+automerge_refuse() {  # issue number, PR number, reason
+  gh issue comment "$1" --body "🤖 **No mergeé el PR #$2 con auto-merge**: $3. Revísalo y mergéalo a mano si está bien." || true
+  echo "❌ No mergeé el PR #$2: $3" >&2
 }
 
 # Single source of truth for where a worker's branch/worktree lives, so the

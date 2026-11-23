@@ -187,7 +187,7 @@ muestra la tabla y espera tu confirmación.
 
 **Aquí decides también la confianza:** los tickets mecánicos y de bajo riesgo
 (datos, estilos, refactors con buenos tests) pueden llevar la etiqueta
-**`auto-merge`**: sus PRs se mergearán solos al quedar verdes, para que la
+**`auto-merge`**: sus PRs se mergearán solos cuando pasen sus checks, para que la
 cadena avance de noche sin ti. Dilo en la confirmación:
 
 > Confirmo. Ponle auto-merge a US1 y a Polish; US2 y US3 los reviso yo.
@@ -259,10 +259,10 @@ firewall no cubre:
 Cuando llegue el PR: ábrelo en GitHub, mira los cambios ("Files changed"),
 y si te gusta: botón **"Ready for review"** → botón **"Merge pull request"**.
 (Los tickets con `auto-merge` se saltan este paso solos: cuando el worker
-termina, `fabrica-backlog` o la nube marcan el PR como listo y le ponen el
-auto-merge. Cuenta la etiqueta que tenía la issue antes de empezar, así que
-el worker no puede ponérsela él. En un repo privado del plan gratis, GitHub
-no permite el auto-merge: la fábrica lo comenta en la issue y lo mergeas tú.)
+termina, `fabrica-backlog` o la nube esperan los checks del PR y lo mergean
+si pasan y si la rama tiene lo último de `main`. Si no, lo comentan en la
+issue y lo mergeas tú. Cuenta la etiqueta que tenía la issue antes de
+empezar, así que el worker no puede ponérsela él.)
 
 Al mergear pasa la magia en cadena: la tarea se cierra sola → el tablero la
 pasa a Done → la barra del épico avanza → y la siguiente tarea queda
@@ -529,10 +529,11 @@ crear tickets, y cada quien corre su carril:
 (por dentro corre `fabrica-backlog` con `ONLY_LABEL=area:billing`, solo en
 esa corrida; sin carril, toma de toda la cola, como siempre)
 
-**Un clic obligatorio con auto-merge en equipo:** en GitHub → Settings →
-Branches → Add branch protection rule para `main` → activar **"Require
-branches to be up to date before merging"**. Evita que dos PRs verdes
-probados contra mains distintos se mergeen y rompan main entre los dos.
+**Dos PRs verdes contra mains distintos:** el auto-merge de la fábrica solo
+mergea una rama que tiene lo último de `main`, así que sus checks probaron lo
+que entra. Para los merges a mano, si tu plan tiene branch protection
+(público, Pro o Team): GitHub → Settings → Branches → regla para `main` →
+**"Require branches to be up to date before merging"**.
 
 **Los tokens, cada quien paga lo suyo:**
 

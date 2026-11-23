@@ -247,10 +247,10 @@ body -q .body` → edit → `gh issue edit N --body-file`). A box you cannot bac
    blocks those commands.
    If the issue carries the `auto-merge` label (a human put it there on
    purpose): in a worker (`fabrica-backlog`, the cloud) leave the PR as a
-   draft; after you stop, the orchestrator marks it ready and queues the
-   auto-merge, using the labels the issue had before you started. In an
-   interactive session, once the PR is green run `fabrica-automerge N`; if it
-   fails, it comments on the issue why. While working a ticket, never add the
+   draft; after you stop, the orchestrator waits for its checks and merges
+   it, using the labels the issue had before you started. In an interactive
+   session, run `fabrica-automerge N` after opening the PR: it waits for the
+   checks too. If it does not merge, it comments on the issue why. While working a ticket, never add the
    `auto-merge` label yourself. The only time the agent puts it is in a planning session
    (`fabrica:issues`, `fabrica:write-ticket`), and only on the issues the
    human named in their OK.

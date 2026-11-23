@@ -102,7 +102,16 @@ case "$1 $2" in
       *--search*) if [ -n "\${FAKE_SEARCH_LAG:-}" ]; then echo 0; else echo "\${FAKE_PR_COUNT:-0}"; fi ;;
       *) echo "\${FAKE_PR_COUNT:-0}" ;;
     esac ;;
-  "pr merge") [ -n "\${FAKE_FAIL_MERGE:-}" ] && { echo "auto-merge no está habilitado" >&2; exit 1; } ;;
+  "pr merge") [ -n "\${FAKE_FAIL_MERGE:-}" ] && { echo "no se pudo mergear" >&2; exit 1; } ;;
+  "pr view") echo "main abc123"; exit 0 ;;
+  "pr checks")
+    # FAKE_CHECKS: el código de salida de cada llamada, en orden (0 pasa,
+    # 1 falla, 8 pendiente, none sin checks); la última se repite.
+    f="${log}.checks"; i=$(cat "$f" 2>/dev/null || echo 0); echo $((i + 1)) > "$f"
+    codes=(\${FAKE_CHECKS:-0}); rc="\${codes[$i]:-\${codes[\${#codes[@]}-1]}}"
+    if [ "$rc" = none ]; then echo "no checks reported on the 'impl-5' branch" >&2; exit 1; fi
+    exit "$rc" ;;
+  "api repos/{owner}/{repo}/compare/main...abc123") echo "\${FAKE_BEHIND:-0}"; exit 0 ;;
 esac
 exit 0
 `,
@@ -630,22 +639,81 @@ describe("comandos de la cola", () => {
   // Que el agente no mergee es un hook; el auto-merge lo pone el orquestador
   // con este comando, nunca el worker (revisión del 2026-11-23).
   describe("fabrica-automerge", () => {
+    /** Sin esperas reales entre consultas. */
+    const AUTOMERGE_FAST = {
+      FABRICA_AUTOMERGE_INTERVAL: "0",
+      FABRICA_AUTOMERGE_WAIT: "2",
+    };
+
     it(
-      "con la etiqueta auto-merge, pasa el PR de impl-N a listo y le pone el auto-merge",
+      "con la etiqueta auto-merge, espera los checks del PR de impl-N y lo mergea",
       async () => {
         const { repo, env } = await project();
 
         const { code } = await run(["automerge", "5"], repo, {
           ...env,
+          ...AUTOMERGE_FAST,
           FAKE_LABELS_5: "auto-merge",
           FAKE_HEAD_PR: "12",
+          FAKE_CHECKS: "8 8 0",
         });
 
         expect(code).toBe(0);
         const log = await calls();
         expect(log).toMatch(/pr list --head impl-5/);
+        expect(log.match(/pr checks 12/g)).toHaveLength(3);
         expect(log).toMatch(/pr ready 12/);
-        expect(log).toMatch(/pr merge 12 --auto --squash/);
+        expect(log).toMatch(/pr merge 12 --squash/);
+        expect(log.indexOf("pr merge")).toBeGreaterThan(
+          log.lastIndexOf("pr checks"),
+        );
+      },
+      TIMEOUT,
+    );
+
+    // Sin branch protection no hay checks obligatorios, y `gh pr merge
+    // --auto` mergeaba al instante, antes de que terminaran (fabrica-prueba
+    // #37, 2026-11-23).
+    it(
+      "nunca usa --auto",
+      async () => {
+        const { repo, env } = await project();
+
+        await run(["automerge", "5"], repo, {
+          ...env,
+          ...AUTOMERGE_FAST,
+          FAKE_LABELS_5: "auto-merge",
+          FAKE_HEAD_PR: "12",
+        });
+
+        expect(await calls()).not.toMatch(/--auto/);
+      },
+      TIMEOUT,
+    );
+
+    it.each([
+      ["un check falla", { FAKE_CHECKS: "8 1" }, /check/],
+      ["el PR no tiene checks", { FAKE_CHECKS: "none" }, /check/],
+      ["los checks no terminan a tiempo", { FAKE_CHECKS: "8" }, /check/],
+      ["la rama no tiene lo último de la base", { FAKE_BEHIND: "2" }, /main/],
+    ])(
+      "no mergea si %s, y lo comenta en la issue",
+      async (_caso, fake, why) => {
+        const { repo, env } = await project();
+
+        const { code } = await run(["automerge", "5"], repo, {
+          ...env,
+          ...AUTOMERGE_FAST,
+          FAKE_LABELS_5: "auto-merge",
+          FAKE_HEAD_PR: "12",
+          ...fake,
+        });
+
+        expect(code).toBe(1);
+        const log = await calls();
+        expect(log).not.toMatch(/pr merge/);
+        expect(log).toMatch(/issue comment 5 /);
+        expect(log.slice(log.indexOf("issue comment 5"))).toMatch(why);
       },
       TIMEOUT,
     );
@@ -692,6 +760,7 @@ describe("comandos de la cola", () => {
 
         const { code } = await run(["automerge", "5"], repo, {
           ...env,
+          ...AUTOMERGE_FAST,
           FAKE_LABELS_5: "auto-merge",
           FAKE_HEAD_PR: "12",
           FAKE_FAIL_MERGE: "1",

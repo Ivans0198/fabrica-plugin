@@ -91,6 +91,27 @@ describe("claude-backlog.yml después del agente", () => {
     expect(steps.indexOf(merge!)).toBeGreaterThan(net);
   });
 
+  // Mergeado con github.token, GitHub no dispara workflows: no se cerraba la
+  // issue ni corría labels-cleanup (fabrica-prueba #36, 2026-11-23).
+  it("después de un auto-merge, cierra la issue y hace la limpieza de labels-cleanup", () => {
+    const merge = steps.find((s) => s.run?.includes("fabrica-automerge"));
+
+    expect(merge?.run).toMatch(/if fabrica-automerge "\$NUM"; then/);
+    expect(merge?.run).toMatch(/gh issue close "\$NUM"/);
+    expect(merge?.run).toContain('scripts/clear-blockers.sh" "$NUM"');
+    expect(merge?.run).toContain('scripts/sync-epic-status.sh" "$NUM"');
+  });
+
+  it("la espera del auto-merge tiene su plazo y cabe en el del job", () => {
+    const job = Object.values(workflow.jobs)[0];
+    const merge = steps.find((s) => s.run?.includes("fabrica-automerge"));
+
+    expect(merge?.["timeout-minutes"]).toBeGreaterThan(0);
+    expect(
+      agent!["timeout-minutes"]! + merge!["timeout-minutes"]!,
+    ).toBeLessThan(job["timeout-minutes"]!);
+  });
+
   it("sube la transcripción del agente como artefacto, aunque la corrida falle", () => {
     const upload = steps.find((s) =>
       s.uses?.startsWith("actions/upload-artifact"),
