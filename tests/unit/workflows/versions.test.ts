@@ -46,6 +46,22 @@ describe("versiones de los workflows", () => {
     }
   });
 
+  // Con la 1.0.269, el agente de la nube no tuvo permiso para Bash y terminó
+  // sin hacer nada (fabrica-prueba #36, 2026-11-23). La 1.0.286 es la que
+  // corrió las issues de la fase 5.
+  it("claude-code-action va en la versión probada con la fábrica", () => {
+    const uses = thirdPartyUses().filter(({ line }) =>
+      line.includes("anthropics/claude-code-action@"),
+    );
+
+    expect(uses.length).toBeGreaterThan(0);
+    for (const { file, line } of uses) {
+      expect(line, file).toContain(
+        "@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286",
+      );
+    }
+  });
+
   it("la misma action va en el mismo SHA en todos los workflows", () => {
     const shas = new Map<string, Set<string>>();
     for (const { line } of thirdPartyUses()) {

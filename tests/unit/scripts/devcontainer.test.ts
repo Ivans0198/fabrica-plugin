@@ -255,6 +255,29 @@ describe("fabrica-devcontainer", () => {
     TIMEOUT,
   );
 
+  // El gh de Debian bookworm es 2.23.0, de 2023 (visto con Docker el
+  // 2026-11-23): se instala del repositorio de GitHub.
+  it(
+    "instala gh del repositorio de GitHub, no el viejo de Debian",
+    async () => {
+      const dir = project();
+      await run(dir, []);
+      const dockerfile = readFileSync(
+        path.join(dir, ".devcontainer/Dockerfile"),
+        "utf8",
+      );
+
+      expect(dockerfile).toContain("https://cli.github.com/packages");
+      expect(dockerfile).toContain("githubcli-archive-keyring.gpg");
+      const firstInstall = dockerfile.slice(
+        0,
+        dockerfile.indexOf("cli.github.com"),
+      );
+      expect(firstInstall).not.toMatch(/^\s+gh \\$/m);
+    },
+    TIMEOUT,
+  );
+
   it.each([
     ["un dominio raro", ["--domain", "pypi.org; rm -rf /"]],
     ["una feature rara", ["--feature", "python $(id)"]],

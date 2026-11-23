@@ -203,7 +203,8 @@ seed_settings() {
   fi
 }
 
-# En refresh, de settings.json solo se toca la atribución de los commits.
+# En refresh, de settings.json solo se toca la atribución de los commits y se
+# quitan los permisos que la fábrica ya no da.
 refresh_attribution() {
   local file=.claude/settings.json result
   [ -f "$file" ] || return 0
@@ -212,7 +213,7 @@ refresh_attribution() {
   result=$(node "$SCRIPT_DIR/lib/merge-settings.mjs" "$file" "$TEMPLATES/.claude/settings.json" --attribution-only) \
     || die "No actualicé nada. Arregla $file y vuelve a correr fabrica-setup refresh."
   if [ "$result" = changed ]; then
-    echo "  ✎ $file: los commits ya no mencionan a Claude. Commitéalo: los workers lo leen del último commit."
+    echo "  ✎ $file: al día con la fábrica (sin la atribución de Claude en los commits ni los permisos que la fábrica ya no da). Commitéalo: los workers lo leen del último commit."
   fi
 }
 
