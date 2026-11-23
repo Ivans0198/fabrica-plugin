@@ -1148,6 +1148,9 @@ describe("fabrica-setup y la atribución de los commits", () => {
           }
         ).permissions.allow,
       ).toEqual(["Bash(make:*)"]);
+      // La atribución ya estaba apagada: el aviso no puede decir que cambió.
+      expect(out).not.toMatch(/ya no mencionan/);
+      expect(out).toMatch(/\.claude\/settings\.json/);
     },
     TIMEOUT,
   );
