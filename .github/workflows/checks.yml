@@ -40,9 +40,9 @@ jobs:
   checks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Trae el plugin fabrica
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ inputs.fabrica_repo }}
           ref: ${{ inputs.fabrica_ref }}
@@ -55,9 +55,10 @@ jobs:
         run: |
           mv .fabrica-plugin "$RUNNER_TEMP/fabrica-plugin"
           echo "$RUNNER_TEMP/fabrica-plugin/plugins/fabrica/bin" >> "$GITHUB_PATH"
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 20
+          node-version: 24
+          package-manager-cache: false
       # Sin factory.json el proyecto todavía no pasó por el bootstrap: los
       # pasos de la app fallarían por no existir, no por trabajo mal hecho.
       # Es la misma condición que desarma el Stop gate. No pasa callado: un
