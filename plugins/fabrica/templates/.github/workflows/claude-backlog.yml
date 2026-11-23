@@ -17,6 +17,8 @@ permissions:
   issues: write
   pull-requests: write
   id-token: write
+  checks: read
+  statuses: read
 
 jobs:
   backlog:

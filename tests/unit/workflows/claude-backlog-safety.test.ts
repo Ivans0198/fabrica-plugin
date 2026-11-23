@@ -102,6 +102,15 @@ describe("claude-backlog.yml después del agente", () => {
     expect(merge?.run).toContain('scripts/sync-epic-status.sh" "$NUM"');
   });
 
+  it("el job puede leer los checks del PR, para esperarlos", () => {
+    const job = Object.values(workflow.jobs)[0] as {
+      permissions?: Record<string, string>;
+    };
+
+    expect(job.permissions?.checks).toBe("read");
+    expect(job.permissions?.statuses).toBe("read");
+  });
+
   it("la espera del auto-merge tiene su plazo y cabe en el del job", () => {
     const job = Object.values(workflow.jobs)[0];
     const merge = steps.find((s) => s.run?.includes("fabrica-automerge"));

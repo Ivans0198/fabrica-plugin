@@ -105,11 +105,18 @@ case "$1 $2" in
   "pr merge") [ -n "\${FAKE_FAIL_MERGE:-}" ] && { echo "no se pudo mergear" >&2; exit 1; } ;;
   "pr view") echo "main abc123"; exit 0 ;;
   "pr checks")
-    # FAKE_CHECKS: el código de salida de cada llamada, en orden (0 pasa,
-    # 1 falla, 8 pendiente, none sin checks); la última se repite.
+    # FAKE_CHECKS: lo que contesta cada llamada, en orden (0 pasa, 1 falla,
+    # 8 pendiente, none sin checks, error sin permiso); la última se repite.
+    # Con --json, como gh: los checks con su bucket, y el mismo código.
     f="${log}.checks"; i=$(cat "$f" 2>/dev/null || echo 0); echo $((i + 1)) > "$f"
     codes=(\${FAKE_CHECKS:-0}); rc="\${codes[$i]:-\${codes[\${#codes[@]}-1]}}"
-    if [ "$rc" = none ]; then echo "no checks reported on the 'impl-5' branch" >&2; exit 1; fi
+    case "$rc" in
+      none) echo "no checks reported on the 'impl-5' branch" >&2; exit 1 ;;
+      error) echo "GraphQL: Resource not accessible by integration (repository.pullRequest.statusCheckRollup)" >&2; exit 1 ;;
+      0) echo '[{"bucket":"pass"},{"bucket":"skipping"}]' ;;
+      1) echo '[{"bucket":"pass"},{"bucket":"fail"}]' ;;
+      8) echo '[{"bucket":"pass"},{"bucket":"pending"}]' ;;
+    esac
     exit "$rc" ;;
   "api repos/{owner}/{repo}/compare/main...abc123") echo "\${FAKE_BEHIND:-0}"; exit 0 ;;
 esac
@@ -692,7 +699,14 @@ describe("comandos de la cola", () => {
     );
 
     it.each([
-      ["un check falla", { FAKE_CHECKS: "8 1" }, /check/],
+      ["un check falla", { FAKE_CHECKS: "8 1" }, /un check falló/],
+      // En la nube, sin `checks: read`, gh no pudo leerlos y eso se contó
+      // como un check rojo (fabrica-prueba #39, 2026-11-23).
+      [
+        "no puede leer los checks",
+        { FAKE_CHECKS: "error" },
+        /no pude leer sus checks.*Resource not accessible/s,
+      ],
       ["el PR no tiene checks", { FAKE_CHECKS: "none" }, /check/],
       ["los checks no terminan a tiempo", { FAKE_CHECKS: "8" }, /check/],
       ["la rama no tiene lo último de la base", { FAKE_BEHIND: "2" }, /main/],

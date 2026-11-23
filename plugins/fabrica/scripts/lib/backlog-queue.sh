@@ -271,24 +271,33 @@ automerge_issue() {  # issue number
 }
 
 # Espera a que terminen los checks del PR. 0 si todos pasan; si no, 1 y el
-# motivo en AUTOMERGE_WHY. Un PR recién abierto puede no tener checks todavía:
-# eso cuenta como pendiente hasta el plazo.
+# motivo en AUTOMERGE_WHY. Los lee como JSON: el código de salida de
+# `gh pr checks` es 1 tanto para un check rojo como para un error al leerlos
+# (sin `checks: read`, en la nube, fabrica-prueba #39), y esos no son lo
+# mismo. Un PR recién abierto puede no tener checks todavía: eso cuenta como
+# pendiente hasta el plazo.
 automerge_wait_checks() {  # PR number
-  local pr="$1" out rc deadline=$((SECONDS + ${FABRICA_AUTOMERGE_WAIT:-1800}))
+  local pr="$1" out state deadline=$((SECONDS + ${FABRICA_AUTOMERGE_WAIT:-1800}))
   while :; do
-    out=$(gh pr checks "$pr" 2>&1)
-    rc=$?
-    case "$rc" in
-      0) return 0 ;;
-      8) AUTOMERGE_WHY="sus checks no terminaron en ${FABRICA_AUTOMERGE_WAIT:-1800} s" ;;
-      *)
-        if printf '%s' "$out" | grep -q "no checks reported"; then
-          AUTOMERGE_WHY="el PR no tiene checks: sin ellos no hay nada que confirme que está en verde"
-        else
-          AUTOMERGE_WHY="un check falló"
-          return 1
-        fi
-        ;;
+    out=$(gh pr checks "$pr" --json bucket 2>&1)
+    if state=$(printf '%s' "$out" | jq -r '
+        [.[].bucket] as $b
+        | if ($b | length) == 0 then "none"
+          elif any($b[]; . == "fail" or . == "cancel") then "fail"
+          elif any($b[]; . == "pending") then "pending"
+          else "pass" end' 2>/dev/null); then
+      :
+    elif printf '%s' "$out" | grep -q "no checks reported"; then
+      state=none
+    else
+      AUTOMERGE_WHY="no pude leer sus checks ($(printf '%s' "$out" | head -n 3 | tr '\n' ' '))"
+      return 1
+    fi
+    case "$state" in
+      pass) return 0 ;;
+      fail) AUTOMERGE_WHY="un check falló"; return 1 ;;
+      pending) AUTOMERGE_WHY="sus checks no terminaron en ${FABRICA_AUTOMERGE_WAIT:-1800} s" ;;
+      none) AUTOMERGE_WHY="el PR no tiene checks: sin ellos no hay nada que confirme que está en verde" ;;
     esac
     [ "$SECONDS" -lt "$deadline" ] || return 1
     sleep "${FABRICA_AUTOMERGE_INTERVAL:-20}"
