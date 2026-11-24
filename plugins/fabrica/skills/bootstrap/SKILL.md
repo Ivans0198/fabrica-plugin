@@ -274,6 +274,10 @@ nunca se activa y el diseño se desperdicia.
    radios, escala de espaciado. De un HTML/CSS los valores son exactos: léelos,
    no los estimes. De un PDF o una imagen, mírala y anota junto a cada token
    que fue leído a ojo, para que el humano lo pueda corregir.
+   **Las fuentes las sirve el proyecto**, con `@fontsource/<fuente>` de npm,
+   aunque el diseño las cargue de Google Fonts u otro CDN. Con un CDN, los
+   e2e y las capturas dependen de una red que el firewall del dev container
+   no deja pasar, y el sitio publicado le avisa a un tercero de cada visita.
 3. **Si el diseño es HTML**, además tómale una captura y guárdala junto al
    original: el Modo A del ui-reviewer compara imágenes, y un `.html` no le
    sirve tal cual.
@@ -365,14 +369,14 @@ Escríbelo con `fabrica-devcontainer`, con la feature y los dominios del stack.
 Node ya va en la base (Claude Code lo necesita), igual que GitHub, Anthropic y
 npm:
 
-| Stack     | Opciones                                                                                                         |
-| --------- | ---------------------------------------------------------------------------------------------------------------- |
-| Node / TS | ninguna                                                                                                          |
-| Python    | `--feature ghcr.io/devcontainers/features/python:1 --domain pypi.org --domain files.pythonhosted.org`            |
-| Go        | `--feature ghcr.io/devcontainers/features/go:1 --domain proxy.golang.org --domain sum.golang.org`                |
-| Rust      | `--feature ghcr.io/devcontainers/features/rust:1 --domain index.crates.io --domain static.crates.io`             |
-| Java      | `--feature ghcr.io/devcontainers/features/java:1 --domain repo.maven.apache.org --domain repo1.maven.org`        |
-| Con UI    | además `--domain cdn.playwright.dev --domain playwright.download.prss.microsoft.com` (navegadores de Playwright) |
+| Stack     | Opciones                                                                                                  |
+| --------- | --------------------------------------------------------------------------------------------------------- |
+| Node / TS | ninguna                                                                                                   |
+| Python    | `--feature ghcr.io/devcontainers/features/python:1 --domain pypi.org --domain files.pythonhosted.org`     |
+| Go        | `--feature ghcr.io/devcontainers/features/go:1 --domain proxy.golang.org --domain sum.golang.org`         |
+| Rust      | `--feature ghcr.io/devcontainers/features/rust:1 --domain index.crates.io --domain static.crates.io`      |
+| Java      | `--feature ghcr.io/devcontainers/features/java:1 --domain repo.maven.apache.org --domain repo1.maven.org` |
+| Con UI    | además `--playwright`, después de instalar las dependencias (Chromium va en la imagen)                    |
 
 Por ejemplo, para Python:
 `fabrica-devcontainer --feature ghcr.io/devcontainers/features/python:1 --domain pypi.org --domain files.pythonhosted.org`.

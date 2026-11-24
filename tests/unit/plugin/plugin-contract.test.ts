@@ -325,6 +325,17 @@ describe("planeación con Spec Kit", () => {
     expect(body).toContain("fabrica-devcontainer --feature");
   });
 
+  // refastidioso-web (2026-11-24): con Google Fonts, el e2e dependía de una
+  // red que el firewall del dev container no deja pasar (IP que rotan), y el
+  // gate quedó rojo en main sin cambios.
+  it("el bootstrap escribe el dev container con --playwright si hay UI, y sirve las fuentes desde el proyecto", () => {
+    const body = read("skills/bootstrap/SKILL.md");
+
+    expect(body).toContain("--playwright");
+    expect(body).not.toContain("cdn.playwright.dev");
+    expect(body).toMatch(/@fontsource/);
+  });
+
   it("el aviso de falla de la nube nombra la GitHub App", () => {
     const workflow = readFileSync(
       path.join(REPO_ROOT, ".github/workflows/claude-backlog.yml"),

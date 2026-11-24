@@ -243,6 +243,15 @@ reconstruir. VS Code copia tu identidad de git (`user.name` y `user.email`)
 al contenedor; si lo abres de otra forma, configúrala dentro, o los commits
 de los workers no tendrán autor. Si cambias `allowed-domains.txt`, reconstruye el contenedor.
 
+**Si tu proyecto tiene e2e con Playwright**, el contenedor trae Chromium dentro
+de la imagen, en la versión de `@playwright/test` del proyecto: dentro, el
+firewall no deja bajarlo. Si subes Playwright de versión, cambia
+`PLAYWRIGHT_VERSION` en `.devcontainer/Dockerfile` y reconstruye. Un
+`.devcontainer/` de antes de la 0.5.9 no lo trae: regenéralo con
+`fabrica-devcontainer --force --playwright` (con tus `--feature` y `--domain`).
+Que los tests no dependan de otros servidores: las fuentes, por ejemplo, van
+en el proyecto (`@fontsource`), no de Google Fonts.
+
 `fabrica-backlog` solo acepta `bypassPermissions` si el firewall terminó bien
 (deja `/run/fabrica-firewall-ok`) y example.com no responde. `refresh` no
 toca `.devcontainer/`: si el tuyo es de antes de la 0.5.0, su firewall no deja
