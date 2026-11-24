@@ -299,7 +299,9 @@ los servidores de GitHub, y tu PC puede estar apagado. Tienes dos gatillos:
    feature se hacen en una sesión de Claude contigo delante (Parte 3).
    En un PR que abrió la fábrica, Claude puede correr los tests. En el PR de
    un fork o de alguien sin escritura en el repo, no puede correr npm, los
-   tests ni los intérpretes: solo lee, edita y responde.
+   tests ni los intérpretes, y el gate y el lint de la fábrica no corren:
+   solo lee, edita y responde. En cualquier mención, `factory.json` se lee de
+   la rama principal y Claude no puede mergear ni empujar a ella.
 
 Todo se observa en la pestaña **Actions** del repo (los logs de cada
 corrida). Los PRs se revisan y mergean desde el navegador del celular sin

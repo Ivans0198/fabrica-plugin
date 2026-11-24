@@ -240,6 +240,41 @@ describe("stop gate", () => {
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
 
+  // En Windows CLAUDE_PROJECT_DIR llega con barras invertidas (C:\...) y git
+  // contesta C:/...: no coincidían, el gate entraba a la raíz sin factory.json
+  // y pasaba sin verificar el worktree. Lo mismo con una barra al final.
+  it.each([
+    ["con barra al final", (root: string) => `${root}/`],
+    ["con barras invertidas", (root: string) => root.replace(/\//g, "\\")],
+  ])(
+    "reconoce el worktree con CLAUDE_PROJECT_DIR %s",
+    async (_name, spell) => {
+      workDir = await mkdtemp(path.join(tmpdir(), "seadragons-stop-gate-"));
+      const root = path.join(workDir, "root");
+      const worktree = path.join(root, ".claude/worktrees/impl-1");
+      await mkdir(worktree, { recursive: true });
+      spawnSync("git", ["init", "-q", root]);
+      spawnSync("git", ["init", "-q", worktree]);
+      await writeFile(
+        path.join(worktree, "factory.json"),
+        factoryJson({ lint: ["npx", "eslint", "."] }),
+      );
+      const binDir = await installFakeEslintRunner(workDir, true);
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        CLAUDE_PROJECT_DIR: spell(root),
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      };
+      delete env.FACTORY_GATE;
+
+      const { code, stderr } = await runStopGate(root, env, { cwd: worktree });
+
+      expect(code).toBe(2);
+      expect(stderr).toMatch(/Lint failed/);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
   it(
     "ignora un cwd que queda fuera del proyecto",
     async () => {
@@ -410,12 +445,13 @@ describe.each(READERS)("comandos de factory.json (lector: %s)", (reader) => {
   );
 
   it(
-    "corre lint, typecheck, test y e2e en ese orden, y no corre los que están en null",
+    "corre lint, typecheck, test, build y e2e en ese orden, y no corre los que están en null",
     async () => {
       const { logFile } = await prepare((rec) => ({
         lint: [...rec, "lint"],
         typecheck: [...rec, "typecheck"],
         test: null,
+        build: [...rec, "build"],
         e2e: [...rec, "e2e"],
       }));
 
@@ -425,6 +461,7 @@ describe.each(READERS)("comandos de factory.json (lector: %s)", (reader) => {
       expect(await recordedCalls(logFile)).toEqual([
         ["lint"],
         ["typecheck"],
+        ["build"],
         ["e2e"],
       ]);
     },
@@ -1207,7 +1244,9 @@ describe("workflows", () => {
   // Una mención en la nube tiene permiso de escribir código: con el gate
   // apagado, lo que commiteara no se verificaba. Ahora el gate solo mira lo
   // que cambie la sesión (revisión del 2026-11-23).
-  it("ningún workflow apaga el Stop gate", async () => {
+  // claude-mentions.yml lo apaga solo en el PR de alguien sin escritura, con
+  // lo que decide su paso trust (tests/unit/workflows/claude-mentions-trust).
+  it("ningún workflow apaga el Stop gate salvo por el paso trust", async () => {
     const mentionsYml = await readFile(
       pluginFile(".github/workflows/claude-mentions.yml"),
       "utf8",
@@ -1217,7 +1256,9 @@ describe("workflows", () => {
       "utf8",
     );
 
-    expect(mentionsYml).not.toMatch(/FACTORY_GATE/);
+    expect(mentionsYml.match(/FACTORY_GATE.*/g)).toEqual([
+      "FACTORY_GATE: ${{ steps.trust.outputs.hooks }}",
+    ]);
     expect(backlogYml).not.toMatch(/FACTORY_GATE/);
   });
 });

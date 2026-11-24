@@ -93,10 +93,14 @@ get() { cat "$WORK/$1.$2" 2>/dev/null || true; }
 
 # Las issues que ya creó una corrida anterior. Cada paso va a un archivo, para
 # que un fallo de gh corte aquí: un listado vacío por error duplicaría todo.
+# Solo cuentan las marcas de issues de esta cuenta: cualquiera que pueda abrir
+# issues podría copiar una y hacer que la suya entre a la cola.
 LIST_LIMIT=1000
-gh issue list --state all --limit "$LIST_LIMIT" --json number,body > "$WORK/list.json" \
+ME=$(gh api user -q .login) && [ -n "$ME" ] \
+  || die "No pude saber con qué cuenta de GitHub corres (gh api user). No creé nada."
+gh issue list --state all --limit "$LIST_LIMIT" --json number,body,author > "$WORK/list.json" \
   || die "No pude listar las issues del repo para saber cuáles ya existen. No creé nada; vuelve a intentarlo."
-node "$PLAN_JS" markers "$WORK/list.json" "$EPIC" "$LIST_LIMIT" > "$WORK/markers" || exit 1
+node "$PLAN_JS" markers "$WORK/list.json" "$EPIC" "$LIST_LIMIT" "$ME" > "$WORK/markers" || exit 1
 while read -r n key sha; do
   [ -n "${n:-}" ] || continue
   put found "$key" "$n"

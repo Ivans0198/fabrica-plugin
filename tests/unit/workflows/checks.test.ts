@@ -2,7 +2,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { load } from "js-yaml";
 import { describe, expect, it } from "vitest";
-import { REPO_ROOT, TEMPLATES_ROOT } from "../../support/plugin-paths";
+import {
+  PLUGIN_ROOT,
+  REPO_ROOT,
+  TEMPLATES_ROOT,
+} from "../../support/plugin-paths";
 
 /** El reusable workflow vive en el repo del plugin; el proyecto lo llama. */
 const WORKFLOW_PATH = path.join(REPO_ROOT, ".github/workflows/checks.yml");
@@ -52,6 +56,25 @@ function stepNamed(name: string): WorkflowStep {
   }
   return step;
 }
+
+// La CI y el Stop gate corrían listas distintas: la CI sin e2e y el gate sin
+// build (revisión del 2026-11-23). El e2e de la CI es visual-baselines.yml,
+// que compara con la línea base de Linux.
+describe("la CI y el Stop gate corren la misma lista", () => {
+  it("en el mismo orden, salvo el e2e, que en la CI va aparte", () => {
+    const gate = [
+      ...readFileSync(
+        path.join(PLUGIN_ROOT, "hooks/stop-gate.sh"),
+        "utf8",
+      ).matchAll(/^run_check (\w+) /gm),
+    ].map((m) => m[1]);
+    const ci = allSteps()
+      .map((s) => /^fabrica-cmd (\w+)$/.exec(s.run?.trim() ?? "")?.[1])
+      .filter((key): key is string => !!key && key !== "install");
+
+    expect(gate).toEqual([...ci, "e2e"]);
+  });
+});
 
 describe("workflow de checks", () => {
   it("parsea como YAML válido", () => {

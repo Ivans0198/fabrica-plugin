@@ -3,7 +3,7 @@
 # Exit code 2 = block (Claude receives stderr and keeps iterating).
 # Exit code 0 = allow finish.
 #
-# Los comandos salen de factory.json (commands.lint, typecheck, test, e2e), así
+# Los comandos salen de factory.json (commands.lint, typecheck, test, build, e2e), así
 # que el gate sirve para cualquier stack sin editarlo. Un comando en null está
 # apagado a propósito y no se corre. Keep the cheapest checks first so
 # failures surface fast.
@@ -35,8 +35,17 @@ if [ ! -t 0 ] && command -v jq >/dev/null 2>&1; then
   hook_cwd=$(printf '%s' "$hook_input" | jq -r '.cwd // empty' 2>/dev/null || true)
   if [ -n "$hook_cwd" ] && [ -d "$hook_cwd" ]; then
     hook_top=$(git -C "$hook_cwd" rev-parse --show-toplevel 2>/dev/null || true)
-    case "$hook_top/" in
-      "${ROOT:-$hook_top}"/*) ROOT="$hook_top" ;;
+    # En Windows CLAUDE_PROJECT_DIR viene como C:\... y git contesta C:/...:
+    # se comparan con barras normales, sin la del final y, con letra de
+    # unidad, sin distinguir mayúsculas.
+    norm_path() {
+      local p="${1//\\//}"
+      p="${p%/}"
+      [[ "$p" =~ ^[A-Za-z]:/ ]] && p=$(printf '%s' "$p" | tr '[:upper:]' '[:lower:]')
+      printf '%s' "$p"
+    }
+    case "$(norm_path "$hook_top")/" in
+      "$(norm_path "${ROOT:-$hook_top}")"/*) ROOT="$hook_top" ;;
     esac
   fi
 fi
@@ -250,9 +259,12 @@ run_check typecheck "Type check"
 # 3. Unit tests
 run_check test "Tests"
 
+# 4. Build: la CI lo corre, y un worker no debería enterarse en el PR.
+run_check build "Build"
+
 # Los tests del kit no corren aquí: viven y corren en el repo del plugin.
 
-# 4. E2E: visual regression + accessibility, when the project has them.
+# 5. E2E: visual regression + accessibility, when the project has them.
 run_check e2e "E2E (visual/a11y)"
 
 rm -f "$COUNTER_FILE"

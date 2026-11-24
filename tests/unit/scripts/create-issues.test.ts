@@ -155,7 +155,8 @@ json_issue() { # n
     const fs = require("fs"); const [dir, n] = process.argv.slice(1);
     const read = (f) => fs.existsSync(f) ? fs.readFileSync(f, "utf8") : "";
     const labels = read(dir + "/" + n + ".labels").split("\\n").filter(Boolean).map((name) => ({ name }));
-    process.stdout.write(JSON.stringify({ number: Number(n), state: read(dir + "/" + n + ".state").trim() || "OPEN", labels, body: read(dir + "/" + n + ".body") }));
+    const author = { login: read(dir + "/" + n + ".author").trim() || "tester" };
+    process.stdout.write(JSON.stringify({ number: Number(n), state: read(dir + "/" + n + ".state").trim() || "OPEN", labels, body: read(dir + "/" + n + ".body"), author }));
   ' "$S/issues" "$1"
 }
 case "$1 $2" in
@@ -229,6 +230,7 @@ if [ "$1" = "api" ] && [ "$2" = "--method" ]; then
   echo "$epic" > "$S/issues/$((id - 900000)).parent"
   exit 0
 fi
+if [ "$1 $2" = "api user" ]; then echo "\${FAKE_ME:-tester}"; exit 0; fi
 if [ "$1" = "api" ]; then
   n="\${2##*/}"
   printf '{"id":%s}\\n' "$((900000 + n))"
@@ -658,6 +660,35 @@ describe("fabrica-create-issues", () => {
         expect(issue.labels).toContain("pending");
         expect(issue.parent).toBe(String(EPIC));
       }
+    },
+    TIMEOUT,
+  );
+
+  // Cualquiera que pueda abrir issues podía copiar una marca: create-issues
+  // tomaba su issue como ya creada y al final le ponía pending.
+  it(
+    "para sin tocar nada si una marca está en una issue que abrió otra cuenta",
+    () => {
+      const p = project();
+      const sha = writePlan(p, validPlan());
+      create(p, sha);
+      const us1 = byKey(p, "US1");
+      writeFileSync(
+        path.join(p.state, "issues", `${us1.n}.author`),
+        "intruso\n",
+      );
+      const before = log(p).length;
+
+      const { code, out } = create(p, sha);
+
+      expect(code).not.toBe(0);
+      expect(out).toContain(`#${us1.n}`);
+      expect(out).toContain("intruso");
+      expect(
+        log(p)
+          .slice(before)
+          .filter((l) => /^issue (create|edit)/.test(l)),
+      ).toEqual([]);
     },
     TIMEOUT,
   );

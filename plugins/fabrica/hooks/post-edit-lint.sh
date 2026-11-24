@@ -9,6 +9,9 @@
 source "$(dirname "${BASH_SOURCE[0]}")/../scripts/lib/factory-config.sh"
 
 INPUT=$(cat)
+# Apagado donde factory.json no es de fiar (claude-mentions.yml, en el PR de
+# alguien sin escritura), como FACTORY_GATE en el Stop gate.
+[ "${FACTORY_LINT:-}" = off ] && exit 0
 factory_use_base_config
 [ -f "$FACTORY_CONFIG_FILE" ] || exit 0
 
