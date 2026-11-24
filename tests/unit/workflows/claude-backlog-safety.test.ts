@@ -196,6 +196,30 @@ describe("el checkout del proyecto en la nube", () => {
       expect(checkout?.with?.["persist-credentials"]).toBe(false);
     },
   );
+
+  // Sin credencial, la action no pudo traer la rama de un PR: hace ese fetch
+  // antes de poner su token (fabrica-prueba #43, 2026-11-24). Un extraheader
+  // en .git/config sí lo quita la action antes de que corra Claude.
+  it("claude-mentions.yml deja una credencial de lectura que la action quita", () => {
+    const wf = load(
+      readFileSync(
+        path.join(REPO_ROOT, ".github/workflows/claude-mentions.yml"),
+        "utf8",
+      ),
+    ) as { jobs: Record<string, { steps: Step[] }> };
+    const all = Object.values(wf.jobs).flatMap((job) => job.steps);
+    const header = all.findIndex((s) =>
+      s.run?.includes(
+        "git config --local http.${GITHUB_SERVER_URL}/.extraheader",
+      ),
+    );
+    const action = all.findIndex((s) =>
+      s.uses?.startsWith("anthropics/claude-code-action"),
+    );
+
+    expect(header).toBeGreaterThan(-1);
+    expect(header).toBeLessThan(action);
+  });
 });
 
 describe("claude-backlog.yml antes del agente", () => {
