@@ -121,9 +121,17 @@ for (const vp of viewports) {
     test("matches approved baseline", async ({ page }) => {
       await page.goto(APP_URL);
       // networkidle nunca llega mientras el dev server compila bajo carga paralela.
-      // Lo que de verdad mueve píxeles son las fuentes, y toHaveScreenshot ya
-      // reintenta hasta que la página deja de cambiar.
+      // Lo que de verdad mueve píxeles son las fuentes y las imágenes, y
+      // toHaveScreenshot ya reintenta hasta que la página deja de cambiar.
+      // La captura de página completa no hace scroll: una imagen con
+      // loading="lazy" fuera del primer pantallazo saldría vacía o no según
+      // el momento. Se cargan todas antes.
       await page.evaluate(async () => {
+        const images = Array.from(document.images);
+        for (const image of images) image.loading = "eager";
+        await Promise.all(
+          images.map((image) => image.decode().catch(() => undefined)),
+        );
         await document.fonts.ready;
       });
       const name = `home-${vp.name}.png`;
@@ -140,7 +148,9 @@ for (const vp of viewports) {
     test("has no horizontal scroll", async ({ page }) => {
       await page.goto(APP_URL);
       const overflow = await page.evaluate(
-        () => document.documentElement.scrollWidth > document.documentElement.clientWidth
+        () =>
+          document.documentElement.scrollWidth >
+          document.documentElement.clientWidth,
       );
       expect(overflow, `horizontal overflow at ${vp.width}px`).toBe(false);
     });
@@ -154,6 +164,6 @@ test("has no accessibility violations (axe-core)", async ({ page }) => {
     .analyze();
   expect(
     results.violations,
-    JSON.stringify(results.violations, null, 2)
+    JSON.stringify(results.violations, null, 2),
   ).toEqual([]);
 });

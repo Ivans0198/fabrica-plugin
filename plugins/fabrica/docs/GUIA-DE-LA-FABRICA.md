@@ -369,6 +369,12 @@ Un `playwright.config.ts` de antes de la 0.5.10 no lee la variable: agrégale
 `ignoreSnapshots: !!process.env.FABRICA_IGNORE_SNAPSHOTS,` junto a
 `globalSetup`.
 
+La captura de página completa no hace scroll: las imágenes con
+`loading="lazy"` salen vacías según el momento. Desde la 0.5.11 el
+`tests/ui.spec.ts` del plugin las carga todas antes de capturar. Si el tuyo
+es anterior, copia ese bloque (`image.loading = "eager"` y `image.decode()`)
+antes de `document.fonts.ready`.
+
 ## Parte 4.7: El tablero es tu panel de control 🎛️
 
 Arrastrar una tarjeta (no-épica) a la columna **Todo** significa "quiero esto
