@@ -31,3 +31,22 @@ describe("presupuesto de diferencia visual", () => {
     expect(code).not.toMatch(/maxDiffPixelRatio/);
   });
 });
+
+/**
+ * Una captura de página completa no hace scroll: las imágenes con
+ * `loading="lazy"` lejos del primer pantallazo salen vacías o no, según el
+ * momento. Así quedó la línea base del portafolio de refastidioso a 375 px:
+ * cuatro tarjetas en blanco, y aceptarla fija un render que cambia solo.
+ */
+describe("capturas con imágenes diferidas", () => {
+  it("carga todas las imágenes antes de la captura de página completa", () => {
+    const source = readFileSync(UI_SPEC_PATH, "utf8");
+    const beforeCapture = source.slice(
+      0,
+      source.indexOf("toHaveScreenshot(name"),
+    );
+
+    expect(beforeCapture).toMatch(/loading = "eager"/);
+    expect(beforeCapture).toMatch(/\.decode\(\)/);
+  });
+});
