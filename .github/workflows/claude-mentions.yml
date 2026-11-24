@@ -118,6 +118,39 @@ jobs:
             exit 1
           fi
 
+      # La action niega npm, node, los tests y los intérpretes en un PR cuyo
+      # autor no tiene escritura, y un bot nunca la tiene: en los PRs de la
+      # fábrica, Claude no podía correr lo que el Stop gate sí corre. Solo se
+      # apaga si el PR lo abrió claude[bot] desde una rama de este repo; en
+      # los de forks o de personas sin escritura, sigue.
+      - name: ¿El PR es de la fábrica?
+        id: trust
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number || (github.event.issue.pull_request && github.event.issue.number) || '' }}
+        run: |
+          restrict=true
+          if [ -n "$PR_NUMBER" ] \
+            && info=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" \
+                 -q '"\(.user.login) \(.user.type) \(.head.repo.full_name)"') \
+            && [ "$info" = "claude[bot] Bot $GITHUB_REPOSITORY" ]; then
+            restrict=false
+            echo "PR #$PR_NUMBER de la fábrica: Claude puede correr los tests"
+          fi
+          echo "restrict=$restrict" >> "$GITHUB_OUTPUT"
+
+      # En un PR, la action trae su rama antes de poner el token de la App, y
+      # sin la credencial del checkout ese fetch fallaba (fabrica-prueba #43).
+      # Como extraheader en .git/config, la action la quita antes de que corra
+      # Claude, así que los pushes siguen saliendo con la App.
+      - name: Credencial de lectura para que la action traiga la rama del PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          HEADER="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::$HEADER"
+          git config --local http.${GITHUB_SERVER_URL}/.extraheader "$HEADER"
+
       - name: Run Claude on the mention
         uses: anthropics/claude-code-action@acfe7992852970efb4fee683d63d628e3e52df67 # v1.0.286
         env:
@@ -133,5 +166,6 @@ jobs:
           anthropic_api_key: ${{ steps.cred.outputs.api }}
           plugin_marketplaces: ${{ runner.temp }}/fabrica-plugin
           plugins: fabrica@fabrica-local
+          restrict_untrusted_prs: ${{ steps.trust.outputs.restrict }}
           claude_args: "--max-turns 50 --model ${{ env.FACTORY_MODEL }}"
           # Sin prompt: la Action lee la mención y responde en el hilo.
