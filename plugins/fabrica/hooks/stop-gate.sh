@@ -3,7 +3,7 @@
 # Exit code 2 = block (Claude receives stderr and keeps iterating).
 # Exit code 0 = allow finish.
 #
-# Los comandos salen de factory.json (commands.lint, typecheck, test, e2e), así
+# Los comandos salen de factory.json (commands.lint, typecheck, test, build, e2e), así
 # que el gate sirve para cualquier stack sin editarlo. Un comando en null está
 # apagado a propósito y no se corre. Keep the cheapest checks first so
 # failures surface fast.
@@ -250,9 +250,12 @@ run_check typecheck "Type check"
 # 3. Unit tests
 run_check test "Tests"
 
+# 4. Build: la CI lo corre, y un worker no debería enterarse en el PR.
+run_check build "Build"
+
 # Los tests del kit no corren aquí: viven y corren en el repo del plugin.
 
-# 4. E2E: visual regression + accessibility, when the project has them.
+# 5. E2E: visual regression + accessibility, when the project has them.
 run_check e2e "E2E (visual/a11y)"
 
 rm -f "$COUNTER_FILE"

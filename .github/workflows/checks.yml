@@ -78,15 +78,17 @@ jobs:
       - name: Instala el navegador que necesitan los tests de captura de UI
         if: steps.repo.outputs.bootstrapped == 'true' && hashFiles('playwright.config.*') != ''
         run: npx playwright install --with-deps chromium
-      - name: Tests
-        if: steps.repo.outputs.bootstrapped == 'true'
-        run: fabrica-cmd test
+      # En el orden del Stop gate. El e2e va en visual-baselines.yml, que
+      # compara con la línea base de Linux.
       - name: Lint
         if: steps.repo.outputs.bootstrapped == 'true'
         run: fabrica-cmd lint
       - name: Tipos
         if: steps.repo.outputs.bootstrapped == 'true'
         run: fabrica-cmd typecheck
+      - name: Tests
+        if: steps.repo.outputs.bootstrapped == 'true'
+        run: fabrica-cmd test
       - name: Build
         if: steps.repo.outputs.bootstrapped == 'true'
         run: fabrica-cmd build
