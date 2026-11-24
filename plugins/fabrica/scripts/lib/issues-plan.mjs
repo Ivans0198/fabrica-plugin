@@ -5,8 +5,10 @@
 //       escribe el cuerpo de cada issue en <carpeta>/body-<i>.md e imprime el
 //       plan: líneas "@@sha", "@@epic", "@@dir" y una por issue, en orden de
 //       dependencias: i<TAB>clave<TAB>título<TAB>prioridad<TAB>tamaño<TAB>dependencias
-//   node issues-plan.mjs markers <épica>   (stdin: gh issue list --json number,body)
-//       imprime "número clave huella" de las issues ya creadas para esa épica
+//   node issues-plan.mjs markers <archivo> <épica> <límite> <cuenta>
+//       (el archivo: gh issue list --json number,body,author) imprime
+//       "número clave huella" de las issues ya creadas para esa épica; para
+//       si una marca está en una issue de otra cuenta
 //   node issues-plan.mjs state             (stdin: gh issue view --json state,labels)
 //       imprime "ESTADO etiqueta,etiqueta"
 //   node issues-plan.mjs parent            (stdin: la consulta graphql del padre)
@@ -383,7 +385,7 @@ function plan(file, outDir) {
 
 // Lee el listado de issues desde un archivo: si gh falló, el archivo está mal
 // y esto falla, en vez de dar "ninguna creada" y duplicar todo.
-function markers(file, epic, limit) {
+function markers(file, epic, limit, me) {
   if (!/^\d+$/.test(epic) || !/^\d+$/.test(limit)) process.exit(2);
   const issues = JSON.parse(readFileSync(file, "utf8").replace(/^﻿/, ""));
   if (!Array.isArray(issues)) {
@@ -404,6 +406,13 @@ function markers(file, epic, limit) {
   for (const issue of issues) {
     const match = String(issue.body ?? "").match(pattern);
     if (!match || !Number.isInteger(issue.number)) continue;
+    const author = String(issue.author?.login ?? "");
+    if (author !== me) {
+      console.error(
+        `❌ La issue #${issue.number} lleva la marca de ${match[1]}, pero la abrió ${author || "otra cuenta"} y no ${me}. No creé nada. Si es legítima, vuelve a correr con la cuenta que la creó; si no, ciérrala y quítale la marca.`,
+      );
+      process.exit(1);
+    }
     if (seen.has(match[1])) {
       console.error(
         `❌ Dos issues llevan la marca de ${match[1]}: #${seen.get(match[1])} y #${issue.number}. Cierra o corrige la que sobra y vuelve a correr.`,
@@ -418,7 +427,7 @@ function markers(file, epic, limit) {
 
 const [command, ...args] = process.argv.slice(2);
 if (command === "plan") plan(args[0], args[1]);
-else if (command === "markers") markers(args[0], args[1], args[2]);
+else if (command === "markers") markers(args[0], args[1], args[2], args[3]);
 else if (command === "state") {
   const issue = stdinJson();
   console.log(
