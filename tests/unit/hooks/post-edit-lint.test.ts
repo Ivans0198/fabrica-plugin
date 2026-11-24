@@ -135,6 +135,31 @@ describe.each(READERS)("hook de formato (lector: %s)", (reader) => {
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
 
+  // claude-mentions.yml lo apaga en el PR de alguien sin escritura: ahí el
+  // factory.json y lo que sus comandos cargan vienen de la rama del PR.
+  it(
+    "con FACTORY_LINT=off no corre ninguna regla",
+    async () => {
+      const { logFile } = await prepare({ withConfig: true });
+      const file = await editedFile("src/foo.ts");
+
+      const { code } = await runHook(
+        workDir,
+        { tool_name: "Edit", tool_input: { file_path: file } },
+        {
+          ...process.env,
+          FACTORY_JSON_READER: reader,
+          CLAUDE_PROJECT_DIR: workDir,
+          FACTORY_LINT: "off",
+        },
+      );
+
+      expect(code).toBe(0);
+      expect(await recordedCalls(logFile)).toEqual([]);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
   it(
     "corre solo las reglas de la extensión del archivo",
     async () => {

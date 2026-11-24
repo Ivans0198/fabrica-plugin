@@ -81,6 +81,11 @@ jobs:
         run: |
           source "$FABRICA/scripts/lib/factory-config.sh"
           echo "FACTORY_MODEL=$(factory_read_model worker sonnet)" >> "$GITHUB_ENV"
+          # La base de la que los hooks leen factory.json, leída del checkout
+          # de la rama principal, antes de pasar a la del PR.
+          base=$(factory_read_value baseBranch 2>/dev/null)
+          [[ "${base:-main}" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "baseBranch inválida en factory.json" >&2; exit 1; }
+          echo "FABRICA_BASE=${base:-main}" >> "$GITHUB_ENV"
 
       - name: Resolver credencial del actor
         id: cred
@@ -121,8 +126,12 @@ jobs:
       # La action niega npm, node, los tests y los intérpretes en un PR cuyo
       # autor no tiene escritura, y un bot nunca la tiene: en los PRs de la
       # fábrica, Claude no podía correr lo que el Stop gate sí corre. Solo se
-      # apaga si el PR lo abrió claude[bot] desde una rama de este repo; en
-      # los de forks o de personas sin escritura, sigue.
+      # apaga si el PR lo abrió claude[bot] desde una rama de este repo.
+      #
+      # La action repone .claude/ desde la base, pero no factory.json: los
+      # hooks de la fábrica correrían lo que nombra la rama del PR, con las
+      # credenciales del job. En un PR que no es de claude[bot] desde este
+      # repo ni de una persona con escritura, el gate y el lint no corren.
       - name: ¿El PR es de la fábrica?
         id: trust
         env:
@@ -130,14 +139,25 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number || (github.event.issue.pull_request && github.event.issue.number) || '' }}
         run: |
           restrict=true
-          if [ -n "$PR_NUMBER" ] \
-            && info=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" \
-                 -q '"\(.user.login) \(.user.type) \(.head.repo.full_name)"') \
-            && [ "$info" = "claude[bot] Bot $GITHUB_REPOSITORY" ]; then
-            restrict=false
-            echo "PR #$PR_NUMBER de la fábrica: Claude puede correr los tests"
+          hooks=
+          if [ -n "$PR_NUMBER" ]; then
+            hooks=off
+            if info=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER" \
+                 -q '"\(.user.login) \(.user.type) \(.head.repo.full_name)"'); then
+              read -r login type _ <<<"$info"
+              if [ "$info" = "claude[bot] Bot $GITHUB_REPOSITORY" ]; then
+                restrict=false
+                hooks=
+                echo "PR #$PR_NUMBER de la fábrica: Claude puede correr los tests"
+              elif [ "$type" = User ] \
+                && perm=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$login/permission" -q .permission) \
+                && { [ "$perm" = admin ] || [ "$perm" = write ]; }; then
+                hooks=
+              fi
+            fi
+            [ -z "$hooks" ] || echo "PR #$PR_NUMBER de alguien sin escritura: el gate y el lint de la fábrica no corren"
           fi
-          echo "restrict=$restrict" >> "$GITHUB_OUTPUT"
+          { echo "restrict=$restrict"; echo "hooks=$hooks"; } >> "$GITHUB_OUTPUT"
 
       # En un PR, la action trae su rama antes de poner el token de la App, y
       # sin la credencial del checkout ese fetch fallaba (fabrica-prueba #43).
@@ -160,7 +180,14 @@ jobs:
           CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1"
           # El Stop gate queda prendido: si la mención solo responde, ve que la
           # sesión no cambió nada y no verifica; si commitea código, lo
-          # verifica como a cualquier worker.
+          # verifica como a cualquier worker. Se apaga, con el lint, en un PR
+          # de alguien sin escritura (paso trust).
+          FACTORY_GATE: ${{ steps.trust.outputs.hooks }}
+          FACTORY_LINT: ${{ steps.trust.outputs.hooks }}
+          # Como un worker: los hooks leen factory.json de la base y el
+          # worker-guard no deja mergear ni empujar a la base.
+          FABRICA_WORKER: "1"
+          FABRICA_BASE: ${{ env.FABRICA_BASE }}
         with:
           claude_code_oauth_token: ${{ steps.cred.outputs.oauth }}
           anthropic_api_key: ${{ steps.cred.outputs.api }}

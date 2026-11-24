@@ -49,19 +49,29 @@ afterEach(() => {
     rmSync(dir, { recursive: true, force: true });
 });
 
-/** Corre el paso con un gh que contesta `info` o falla si es null. */
+/**
+ * Corre el paso con un gh que contesta `info` por el PR (o falla si es null)
+ * y `perm` por el permiso de su autor.
+ */
 function runTrust(
   prNumber: string,
   info: string | null,
-): { restrict: string; calls: string } {
+  perm = "read",
+): { restrict: string; hooks: string; calls: string } {
   const dir = mkdtempSync(path.join(tmpdir(), "mentions-trust-"));
   temps.push(dir);
   const gh = path.join(dir, "gh");
   writeFileSync(
     gh,
-    `#!/usr/bin/env bash\necho "$*" >> "${dir}/calls"\n${
-      info === null ? "exit 1" : `printf '%s\\n' '${info}'`
-    }\n`,
+    [
+      "#!/usr/bin/env bash",
+      `echo "$*" >> "${dir}/calls"`,
+      'case "$*" in',
+      `  *"/permission"*) printf '%s\\n' '${perm}' ;;`,
+      info === null ? "  *) exit 1 ;;" : `  *) printf '%s\\n' '${info}' ;;`,
+      "esac",
+      "",
+    ].join("\n"),
   );
   chmodSync(gh, 0o755);
   const output = path.join(dir, "output");
@@ -78,9 +88,14 @@ function runTrust(
     encoding: "utf8",
   });
   expect(result.status, result.stderr).toBe(0);
-  const restrict =
-    /^restrict=(.*)$/m.exec(readFileSync(output, "utf8"))?.[1] ?? "";
-  return { restrict, calls: readFileSync(path.join(dir, "calls"), "utf8") };
+  const out = readFileSync(output, "utf8");
+  const value = (key: string) =>
+    new RegExp(`^${key}=(.*)$`, "m").exec(out)?.[1] ?? "<falta>";
+  return {
+    restrict: value("restrict"),
+    hooks: value("hooks"),
+    calls: readFileSync(path.join(dir, "calls"), "utf8"),
+  };
 }
 
 describe("claude-mentions.yml y los PRs de la fábrica", () => {
@@ -112,9 +127,64 @@ describe("claude-mentions.yml y los PRs de la fábrica", () => {
   });
 
   it("en un issue no pregunta nada y la deja", () => {
-    const { restrict, calls } = runTrust("", "claude[bot] Bot dueno/proyecto");
+    const { restrict, hooks, calls } = runTrust(
+      "",
+      "claude[bot] Bot dueno/proyecto",
+    );
 
     expect(restrict).toBe("true");
+    expect(hooks).toBe("");
     expect(calls).toBe("");
+  });
+});
+
+// La action repone .claude/ desde la base en un PR, pero no factory.json: los
+// hooks de la fábrica correrían los comandos que la rama del PR nombra, con
+// las credenciales del job, aunque la action le niegue npm a Claude. En un PR
+// que la action tampoco confía, el gate y el lint no corren.
+describe("los hooks de la fábrica en las menciones", () => {
+  it.each([
+    [
+      "un PR de claude[bot] del mismo repo",
+      "claude[bot] Bot dueno/proyecto",
+      "read",
+    ],
+    [
+      "un PR de una persona con escritura",
+      "alguien User dueno/proyecto",
+      "write",
+    ],
+    ["un PR de una persona admin", "alguien User dueno/proyecto", "admin"],
+  ])("corren en %s", (_name, info, perm) => {
+    expect(runTrust("43", info, perm).hooks).toBe("");
+  });
+
+  it.each([
+    [
+      "un PR de claude[bot] desde un fork",
+      "claude[bot] Bot otro/proyecto",
+      "read",
+    ],
+    [
+      "un PR de una persona sin escritura",
+      "alguien User otro/proyecto",
+      "read",
+    ],
+    ["un PR de otro bot", "dependabot[bot] Bot dueno/proyecto", "write"],
+  ])("se apagan en %s", (_name, info, perm) => {
+    expect(runTrust("43", info, perm).hooks).toBe("off");
+  });
+
+  it("se apagan si no pudo preguntar por el PR", () => {
+    expect(runTrust("43", null).hooks).toBe("off");
+  });
+
+  it("la action recibe el interruptor, la base y la marca de worker", () => {
+    const env = action?.env ?? {};
+
+    expect(env.FACTORY_GATE).toBe("${{ steps.trust.outputs.hooks }}");
+    expect(env.FACTORY_LINT).toBe("${{ steps.trust.outputs.hooks }}");
+    expect(env.FABRICA_WORKER).toBe("1");
+    expect(env.FABRICA_BASE).toBe("${{ env.FABRICA_BASE }}");
   });
 });
