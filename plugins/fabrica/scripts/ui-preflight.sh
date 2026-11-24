@@ -78,14 +78,30 @@ esac
 port_state() {
   local code=0
   if command -v node >/dev/null 2>&1; then
+    # Pregunta en cada dirección del host, no sólo en la primera: Vite puede
+    # escuchar sólo en [::1] mientras Node resuelve "localhost" a 127.0.0.1,
+    # y entonces un servidor arriba se leía como un puerto libre.
     node -e '
+      const http = require("http");
       const u = new URL(process.argv[1]);
-      const req = require("http").get(
-        { hostname: u.hostname, port: u.port || 80, path: "/", timeout: 3000 },
-        () => process.exit(0)
-      );
-      req.on("error", () => process.exit(1));
-      req.on("timeout", () => process.exit(2));
+      const host = u.hostname.replace(/^\[|\]$/g, "");
+      const probe = (address) => new Promise((resolve) => {
+        const req = http.get(
+          { host: address, port: u.port || 80, path: "/", timeout: 3000,
+            headers: { host: u.host } },
+          (res) => { res.resume(); resolve("answered"); }
+        );
+        req.on("error", () => resolve("silent"));
+        req.on("timeout", () => { req.destroy(); resolve("unknown"); });
+      });
+      require("dns").lookup(host, { all: true }, async (err, found) => {
+        const addresses = new Set(err ? [] : found.map((a) => a.address));
+        if (host === "localhost") { addresses.add("127.0.0.1"); addresses.add("::1"); }
+        if (addresses.size === 0) process.exit(1);
+        const states = await Promise.all([...addresses].map(probe));
+        if (states.includes("answered")) process.exit(0);
+        process.exit(states.includes("unknown") ? 2 : 1);
+      });
     ' "$APP_URL" >/dev/null 2>&1 || code=$?
     case "$code" in
       0) printf 'answered' ;;

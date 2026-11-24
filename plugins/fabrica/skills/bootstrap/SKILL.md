@@ -317,7 +317,7 @@ Copia el módulo visual del plugin, sin pisar lo que exista:
 Con `tests/ui.spec.ts` presente, agrega la llamada al workflow visual del
 plugin.
 
-`playwright.config.ts` DEBE traer dos cosas.
+`playwright.config.ts` DEBE traer tres cosas.
 
 La primera, `globalSetup`, que avisa de qué vale y qué no en cada plataforma:
 
@@ -352,6 +352,17 @@ webServer: {
 Sin eso, el Stop hook corre `npx playwright test` por su cuenta y cada test
 falla con ERR_CONNECTION_REFUSED apenas no haya un servidor arriba, bloqueando
 la sesión por algo que no tiene nada que ver con el código.
+
+La tercera, al nivel de `globalSetup`:
+
+```ts
+// El Stop gate no compara las capturas propias: cada historia con UI las
+// cambia, y las revisa una persona en el job visual del PR.
+ignoreSnapshots: !!process.env.FABRICA_IGNORE_SNAPSHOTS,
+```
+
+Sin eso, el worker de cada historia con UI choca con sus propias capturas:
+no puede regenerarlas y el gate no lo deja terminar con ellas en rojo.
 
 El `ui-reviewer` no usa este bloque (saca sus capturas por fuera de la suite),
 así que tiene su propia protección: `fabrica-ui-preflight`, que levanta el

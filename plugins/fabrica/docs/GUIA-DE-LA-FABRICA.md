@@ -359,6 +359,16 @@ ui-reviewer _mirando_ screenshots. Eso se controla en el mismo
 Si falta la clave, vale `"label"`. También puedes ponerle o quitarle la etiqueta `ui-review` a cualquier ticket desde
 la app de GitHub, como con auto-merge.
 
+**Las capturas propias pasan por ti.** Cada historia con UI cambia las
+capturas de `tests/ui.spec.ts-snapshots/`. El worker no las regenera y el
+Stop gate no las compara (corre el e2e con `FABRICA_IGNORE_SNAPSHOTS=1`).
+Las compara el job visual del PR: mira su artefacto `visual-diff` y, si está
+bien, acéptalas con
+`gh workflow run visual-baselines.yml --ref <rama-del-PR> -f reviewed_run_url=<run>`.
+Un `playwright.config.ts` de antes de la 0.5.10 no lee la variable: agrégale
+`ignoreSnapshots: !!process.env.FABRICA_IGNORE_SNAPSHOTS,` junto a
+`globalSetup`.
+
 ## Parte 4.7: El tablero es tu panel de control 🎛️
 
 Arrastrar una tarjeta (no-épica) a la columna **Todo** significa "quiero esto
@@ -492,18 +502,19 @@ seguir". Si no la agregas, funcionará a veces; si la agregas, siempre.
 
 ## Otras piezas que trabajan solas (no las llamas, pero existen)
 
-| Pieza                    | Qué hace                                                                                                                                                                                  | Dónde vive                            |
-| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| **CLAUDE.md**            | Lo propio del proyecto (descripción, stack, skills del proyecto). Importa las reglas de la fábrica desde `.factory/rules/fabrica.md`: qué significa "terminado" y el ciclo de las tareas. | Raíz del repo                         |
-| **factory.json**         | Los comandos del proyecto (tests, lint, tipos, build, dev), el formato, los modelos, la URL de la app y el idioma de los documentos.                                                      | Raíz del repo                         |
-| **design-system.md**     | La verdad visual: colores, espaciados, tipografía y la checklist que usa el ui-reviewer.                                                                                                  | Raíz del repo                         |
-| **Stop hook**            | Cada vez que Claude intenta terminar, corre los comandos de `factory.json`. Si algo falla, no lo deja terminar y le muestra el error para que siga corrigiendo.                           | Plugin (`hooks/`)                     |
-| **fabrica-setup**        | Instala y actualiza la parte de la fábrica que vive en el proyecto: `init`, `check` y `refresh` (Parte 9).                                                                                | Plugin (`bin/`)                       |
-| **process-backlog**      | Lo que corre `/fabrica:backlog`: busca la siguiente tarea sin bloqueos y lanza un Claude a trabajarla.                                                                                    | Plugin (`scripts/`)                   |
-| **fabrica-ui-preflight** | Levanta el servidor de ESTA app y le prohíbe al ui-reviewer fotografiar cualquier otro que ya esté respondiendo. Sin él, otro proyecto en el mismo puerto se revisa en silencio.          | Plugin (`bin/`)                       |
-| **fabrica-task-status**  | Mueve las tarjetas del tablero ("In Progress", "Blocked"). Done lo pone GitHub solo al mergear.                                                                                           | Plugin (`bin/`)                       |
-| **claude-backlog.yml**   | La fábrica en la nube: trabaja una issue cuando le pones `ready-for-dev`, una por corrida.                                                                                                | `.github/workflows/`, llama al plugin |
-| **claude-mentions.yml**  | Responde a `@claude` en issues y comentarios: tu línea directa desde el celular.                                                                                                          | `.github/workflows/`, llama al plugin |
+| Pieza                      | Qué hace                                                                                                                                                                                  | Dónde vive                            |
+| -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| **CLAUDE.md**              | Lo propio del proyecto (descripción, stack, skills del proyecto). Importa las reglas de la fábrica desde `.factory/rules/fabrica.md`: qué significa "terminado" y el ciclo de las tareas. | Raíz del repo                         |
+| **factory.json**           | Los comandos del proyecto (tests, lint, tipos, build, dev), el formato, los modelos, la URL de la app y el idioma de los documentos.                                                      | Raíz del repo                         |
+| **design-system.md**       | La verdad visual: colores, espaciados, tipografía y la checklist que usa el ui-reviewer.                                                                                                  | Raíz del repo                         |
+| **Stop hook**              | Cada vez que Claude intenta terminar, corre los comandos de `factory.json`. Si algo falla, no lo deja terminar y le muestra el error para que siga corrigiendo.                           | Plugin (`hooks/`)                     |
+| **fabrica-setup**          | Instala y actualiza la parte de la fábrica que vive en el proyecto: `init`, `check` y `refresh` (Parte 9).                                                                                | Plugin (`bin/`)                       |
+| **process-backlog**        | Lo que corre `/fabrica:backlog`: busca la siguiente tarea sin bloqueos y lanza un Claude a trabajarla.                                                                                    | Plugin (`scripts/`)                   |
+| **fabrica-ui-preflight**   | Levanta el servidor de ESTA app y le prohíbe al ui-reviewer fotografiar cualquier otro que ya esté respondiendo. Sin él, otro proyecto en el mismo puerto se revisa en silencio.          | Plugin (`bin/`)                       |
+| **fabrica-ui-screenshots** | Saca las capturas del ui-reviewer: levanta el servidor con el preflight, fotografía los tres anchos en tema claro y oscuro, y lo apaga.                                                   | Plugin (`bin/`)                       |
+| **fabrica-task-status**    | Mueve las tarjetas del tablero ("In Progress", "Blocked"). Done lo pone GitHub solo al mergear.                                                                                           | Plugin (`bin/`)                       |
+| **claude-backlog.yml**     | La fábrica en la nube: trabaja una issue cuando le pones `ready-for-dev`, una por corrida.                                                                                                | `.github/workflows/`, llama al plugin |
+| **claude-mentions.yml**    | Responde a `@claude` en issues y comentarios: tu línea directa desde el celular.                                                                                                          | `.github/workflows/`, llama al plugin |
 
 ---
 

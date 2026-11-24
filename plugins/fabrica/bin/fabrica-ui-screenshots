@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Capturas de la app para el ui-reviewer. Uso: fabrica-ui-screenshots [--path /ruta]
+exec bash "$(dirname "$(readlink -f "$0")")/../scripts/ui-screenshots.sh" "$@"

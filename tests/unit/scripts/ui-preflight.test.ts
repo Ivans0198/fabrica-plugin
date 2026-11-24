@@ -567,11 +567,18 @@ describe("ui-preflight.sh", () => {
         JSON.stringify({
           appUrl: `http://localhost:${port}`,
           commands: {
-            dev: ["bash", `${toBashPath(workDir)}/detached-dev-server.sh`, String(port)],
+            dev: [
+              "bash",
+              `${toBashPath(workDir)}/detached-dev-server.sh`,
+              String(port),
+            ],
           },
         }),
       );
-      const env: NodeJS.ProcessEnv = { ...process.env, FABRICA_SERVER_TIMEOUT: "8" };
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        FABRICA_SERVER_TIMEOUT: "8",
+      };
       delete env.APP_URL;
       delete env.DEV_SERVER_CMD;
       cleanupEnv = env;
@@ -667,6 +674,54 @@ describe("ui-preflight.sh", () => {
       expect(code, stderr).toBe(0);
       expect(stdout.trim()).toBe(`http://localhost:${port}`);
       expect(await respondsAt(`http://localhost:${port}`)).toBe(true);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  // Vite escucha en "localhost" como lo resuelve el sistema, y en un dev
+  // container eso puede ser sólo [::1]. Node resuelve "localhost" a
+  // 127.0.0.1: si el preflight prueba sólo esa dirección, no ve al servidor
+  // que sí está arriba y se rinde a los 60 s.
+  it(
+    "up reconoce un dev server que escucha sólo en [::1]",
+    async () => {
+      workDir = await setupWorkDir();
+      const port = nextPort();
+      const env = baseEnv(workDir, port, {
+        DEV_SERVER_CMD: `node -e 'require("node:http").createServer((q,s)=>{s.writeHead(200);s.end("ok")}).listen(${port},"::1")'`,
+      });
+      cleanupEnv = env;
+
+      const { code, stdout, stderr } = await runPreflight(["up"], workDir, env);
+
+      expect(stderr).not.toMatch(/did not answer/);
+      expect(code, stderr).toBe(0);
+      expect(stdout.trim()).toBe(`http://localhost:${port}`);
+    },
+    TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "check no da por libre un puerto que ocupa otro servidor en [::1]",
+    async () => {
+      workDir = await setupWorkDir();
+      const port = nextPort();
+      intruder = spawn(
+        process.execPath,
+        [
+          "-e",
+          `require("node:http").createServer((q,s)=>{s.writeHead(200);s.end("ok")}).listen(${port},"::1");`,
+        ],
+        { stdio: "ignore" },
+      );
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      const env = baseEnv(workDir, port);
+      cleanupEnv = env;
+
+      const { code, stderr } = await runPreflight(["check"], workDir, env);
+
+      expect(code).not.toBe(0);
+      expect(stderr).toMatch(/already answers/);
     },
     TEST_TIMEOUT_MS,
   );

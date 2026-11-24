@@ -468,6 +468,39 @@ describe.each(READERS)("comandos de factory.json (lector: %s)", (reader) => {
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
 
+  // Cada historia con UI cambia sus propias capturas, y regenerarlas es cosa
+  // de una persona (visual-baselines.yml). Si el gate las compara, el worker
+  // no puede terminar ninguna historia: así quedó la #4 de refastidioso.
+  it(
+    "corre el e2e con FABRICA_IGNORE_SNAPSHOTS=1, y los demás checks sin él",
+    async () => {
+      await prepare(() => ({}));
+      const logFile = path.join(workDir, "env.log");
+      const recordEnv = (name: string) => [
+        "node",
+        "-e",
+        `require("fs").appendFileSync(${JSON.stringify(logFile)}, "${name}=" + (process.env.FABRICA_IGNORE_SNAPSHOTS ?? "") + "\\n")`,
+      ];
+      await writeFile(
+        path.join(workDir, "factory.json"),
+        factoryJson({
+          ...ALL_COMMANDS_OFF,
+          test: recordEnv("test"),
+          e2e: recordEnv("e2e"),
+        }),
+      );
+
+      const { code, stderr } = await runGate();
+
+      expect(code, stderr).toBe(0);
+      expect((await readFile(logFile, "utf8")).trim().split("\n")).toEqual([
+        "test=",
+        "e2e=1",
+      ]);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
   // Una suite roja grande llenaba el contexto del worker con toda su salida
   // (revisión del 2026-11-23): van las últimas líneas y el resto a un log.
   it(
