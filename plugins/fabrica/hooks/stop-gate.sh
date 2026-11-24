@@ -35,8 +35,17 @@ if [ ! -t 0 ] && command -v jq >/dev/null 2>&1; then
   hook_cwd=$(printf '%s' "$hook_input" | jq -r '.cwd // empty' 2>/dev/null || true)
   if [ -n "$hook_cwd" ] && [ -d "$hook_cwd" ]; then
     hook_top=$(git -C "$hook_cwd" rev-parse --show-toplevel 2>/dev/null || true)
-    case "$hook_top/" in
-      "${ROOT:-$hook_top}"/*) ROOT="$hook_top" ;;
+    # En Windows CLAUDE_PROJECT_DIR viene como C:\... y git contesta C:/...:
+    # se comparan con barras normales, sin la del final y, con letra de
+    # unidad, sin distinguir mayúsculas.
+    norm_path() {
+      local p="${1//\\//}"
+      p="${p%/}"
+      [[ "$p" =~ ^[A-Za-z]:/ ]] && p=$(printf '%s' "$p" | tr '[:upper:]' '[:lower:]')
+      printf '%s' "$p"
+    }
+    case "$(norm_path "$hook_top")/" in
+      "$(norm_path "${ROOT:-$hook_top}")"/*) ROOT="$hook_top" ;;
     esac
   fi
 fi

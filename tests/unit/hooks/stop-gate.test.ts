@@ -240,6 +240,41 @@ describe("stop gate", () => {
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
 
+  // En Windows CLAUDE_PROJECT_DIR llega con barras invertidas (C:\...) y git
+  // contesta C:/...: no coincidían, el gate entraba a la raíz sin factory.json
+  // y pasaba sin verificar el worktree. Lo mismo con una barra al final.
+  it.each([
+    ["con barra al final", (root: string) => `${root}/`],
+    ["con barras invertidas", (root: string) => root.replace(/\//g, "\\")],
+  ])(
+    "reconoce el worktree con CLAUDE_PROJECT_DIR %s",
+    async (_name, spell) => {
+      workDir = await mkdtemp(path.join(tmpdir(), "seadragons-stop-gate-"));
+      const root = path.join(workDir, "root");
+      const worktree = path.join(root, ".claude/worktrees/impl-1");
+      await mkdir(worktree, { recursive: true });
+      spawnSync("git", ["init", "-q", root]);
+      spawnSync("git", ["init", "-q", worktree]);
+      await writeFile(
+        path.join(worktree, "factory.json"),
+        factoryJson({ lint: ["npx", "eslint", "."] }),
+      );
+      const binDir = await installFakeEslintRunner(workDir, true);
+      const env: NodeJS.ProcessEnv = {
+        ...process.env,
+        CLAUDE_PROJECT_DIR: spell(root),
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      };
+      delete env.FACTORY_GATE;
+
+      const { code, stderr } = await runStopGate(root, env, { cwd: worktree });
+
+      expect(code).toBe(2);
+      expect(stderr).toMatch(/Lint failed/);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
   it(
     "ignora un cwd que queda fuera del proyecto",
     async () => {
