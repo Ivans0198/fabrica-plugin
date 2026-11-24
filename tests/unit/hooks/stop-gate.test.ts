@@ -410,12 +410,13 @@ describe.each(READERS)("comandos de factory.json (lector: %s)", (reader) => {
   );
 
   it(
-    "corre lint, typecheck, test y e2e en ese orden, y no corre los que están en null",
+    "corre lint, typecheck, test, build y e2e en ese orden, y no corre los que están en null",
     async () => {
       const { logFile } = await prepare((rec) => ({
         lint: [...rec, "lint"],
         typecheck: [...rec, "typecheck"],
         test: null,
+        build: [...rec, "build"],
         e2e: [...rec, "e2e"],
       }));
 
@@ -425,6 +426,7 @@ describe.each(READERS)("comandos de factory.json (lector: %s)", (reader) => {
       expect(await recordedCalls(logFile)).toEqual([
         ["lint"],
         ["typecheck"],
+        ["build"],
         ["e2e"],
       ]);
     },
@@ -1207,7 +1209,9 @@ describe("workflows", () => {
   // Una mención en la nube tiene permiso de escribir código: con el gate
   // apagado, lo que commiteara no se verificaba. Ahora el gate solo mira lo
   // que cambie la sesión (revisión del 2026-11-23).
-  it("ningún workflow apaga el Stop gate", async () => {
+  // claude-mentions.yml lo apaga solo en el PR de alguien sin escritura, con
+  // lo que decide su paso trust (tests/unit/workflows/claude-mentions-trust).
+  it("ningún workflow apaga el Stop gate salvo por el paso trust", async () => {
     const mentionsYml = await readFile(
       pluginFile(".github/workflows/claude-mentions.yml"),
       "utf8",
@@ -1217,7 +1221,9 @@ describe("workflows", () => {
       "utf8",
     );
 
-    expect(mentionsYml).not.toMatch(/FACTORY_GATE/);
+    expect(mentionsYml.match(/FACTORY_GATE.*/g)).toEqual([
+      "FACTORY_GATE: ${{ steps.trust.outputs.hooks }}",
+    ]);
     expect(backlogYml).not.toMatch(/FACTORY_GATE/);
   });
 });
