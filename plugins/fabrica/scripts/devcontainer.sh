@@ -5,10 +5,11 @@
 # por las opciones. Después los archivos son del proyecto: no los administra
 # fabrica-setup.
 #
-# Usage: fabrica-devcontainer [--feature <id>]... [--domain <dominio>]... [--force]
-#   --feature  una feature de dev containers, p. ej. ghcr.io/devcontainers/features/python:1
-#   --domain   un dominio más al que el contenedor puede salir, p. ej. pypi.org
-#   --force    reemplaza un .devcontainer/ que ya existe
+# Usage: fabrica-devcontainer [--feature <id>]... [--domain <dominio>]... [--playwright] [--force]
+#   --feature     una feature de dev containers, p. ej. ghcr.io/devcontainers/features/python:1
+#   --domain      un dominio más al que el contenedor puede salir, p. ej. pypi.org
+#   --playwright  Chromium y sus librerías en la imagen, en la versión de @playwright/test del proyecto
+#   --force       reemplaza un .devcontainer/ que ya existe
 #
 # Requires: jq.
 
@@ -18,11 +19,12 @@ TEMPLATES="$(cd "$(dirname "${BASH_SOURCE[0]}")/../templates/.devcontainer" && p
 DEST=.devcontainer
 
 die() { echo "❌ $*" >&2; exit 1; }
-usage() { sed -n 's/^# \{0,1\}//; 9,12p' "${BASH_SOURCE[0]}" >&2; exit 2; }
+usage() { sed -n 's/^# \{0,1\}//; 9,13p' "${BASH_SOURCE[0]}" >&2; exit 2; }
 
 features=()
 domains=()
 force=""
+playwright=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --feature)
@@ -31,6 +33,7 @@ while [ $# -gt 0 ]; do
     --domain)
       [[ "${2:-}" =~ ^[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)+$ ]] || die "dominio raro: '${2:-}'"
       domains+=("$2"); shift 2 ;;
+    --playwright) playwright=1; shift ;;
     --force) force=1; shift ;;
     -h|--help) usage ;;
     *) echo "❌ opción desconocida: $1" >&2; usage ;;
@@ -42,8 +45,37 @@ if [ -e "$DEST" ] && [ -z "$force" ]; then
   die "ya existe $DEST/: no lo piso. Para reemplazarlo, corre de nuevo con --force"
 fi
 
+# Chromium va en la imagen, que se construye con la red abierta: dentro, el
+# firewall no deja usar apt, y la descarga de Chromium sale por IP de Google
+# que rotan y el firewall no puede fijar. Tiene que ser la misma versión que
+# usa el proyecto, porque cada versión de Playwright busca su propio Chromium.
+pw_version=""
+if [ -n "$playwright" ]; then
+  pw_version=$(jq -r '.version // empty' node_modules/@playwright/test/package.json 2>/dev/null || true)
+  [[ "$pw_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+    || die "--playwright necesita @playwright/test instalado: corre npm install antes"
+fi
+
 mkdir -p "$DEST"
 cp "$TEMPLATES/Dockerfile" "$DEST/Dockerfile"
+if [ -n "$pw_version" ]; then
+  block=$(cat <<EOF2
+# Playwright: Chromium y sus librerías de sistema van en la imagen, que se
+# construye con la red abierta. Dentro, el firewall no deja usar apt ni bajar
+# Chromium. Si el proyecto cambia de versión de @playwright/test, cambia
+# PLAYWRIGHT_VERSION y reconstruye: cada versión busca su propio Chromium.
+ARG PLAYWRIGHT_VERSION=$pw_version
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npx -y playwright@\${PLAYWRIGHT_VERSION} install --with-deps chromium \\
+  && chmod -R a+rX /ms-playwright \\
+  && rm -rf /var/lib/apt/lists/*
+
+EOF2
+)
+  awk -v block="$block" '/^ENV DEVCONTAINER=true$/ { print block; print "" } { print }' \
+    "$DEST/Dockerfile" > "$DEST/Dockerfile.tmp"
+  mv "$DEST/Dockerfile.tmp" "$DEST/Dockerfile"
+fi
 cp "$TEMPLATES/init-firewall.sh" "$DEST/init-firewall.sh"
 chmod 755 "$DEST/init-firewall.sh"
 

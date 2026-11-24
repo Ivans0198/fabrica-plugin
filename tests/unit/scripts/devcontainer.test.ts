@@ -278,6 +278,73 @@ describe("fabrica-devcontainer", () => {
     TIMEOUT,
   );
 
+  // refastidioso-web (2026-11-24): la imagen no traía las librerías de
+  // Chromium, y dentro no hay apt. Además cdn.playwright.dev redirige la
+  // descarga a storage.googleapis.com, cuyas IP rotan: el firewall, que
+  // resuelve una vez al arrancar, la cortaba. Con todo eso, el e2e del Stop
+  // gate quedaba rojo y ningún worker podía terminar.
+  it(
+    "con --playwright, Chromium y sus librerías van en la imagen, en la versión del proyecto",
+    async () => {
+      const dir = project();
+      mkdirSync(path.join(dir, "node_modules/@playwright/test"), {
+        recursive: true,
+      });
+      writeFileSync(
+        path.join(dir, "node_modules/@playwright/test/package.json"),
+        JSON.stringify({ name: "@playwright/test", version: "1.65.1" }),
+      );
+
+      const { code } = await run(dir, ["--playwright"]);
+
+      expect(code).toBe(0);
+      const dockerfile = readFileSync(
+        path.join(dir, ".devcontainer/Dockerfile"),
+        "utf8",
+      );
+      expect(dockerfile).toContain("ARG PLAYWRIGHT_VERSION=1.65.1");
+      expect(dockerfile).toContain(
+        "ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright",
+      );
+      const install = dockerfile.indexOf(
+        "playwright@${PLAYWRIGHT_VERSION} install --with-deps chromium",
+      );
+      expect(install).toBeGreaterThan(-1);
+      expect(install).toBeLessThan(dockerfile.indexOf("USER node"));
+      // Nada que bajar en tiempo de ejecución: ni dominios de Playwright ni
+      // de Google en la lista.
+      expect(domains(dir).join(" ")).not.toMatch(/playwright|google/);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "sin --playwright, la imagen no trae Chromium",
+    async () => {
+      const dir = project();
+      await run(dir, []);
+
+      expect(
+        readFileSync(path.join(dir, ".devcontainer/Dockerfile"), "utf8"),
+      ).not.toContain("playwright");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "--playwright sin @playwright/test instalado falla sin escribir nada",
+    async () => {
+      const dir = project();
+
+      const { code, stderr } = await run(dir, ["--playwright"]);
+
+      expect(code).not.toBe(0);
+      expect(stderr).toMatch(/npm install/);
+      expect(existsSync(path.join(dir, ".devcontainer"))).toBe(false);
+    },
+    TIMEOUT,
+  );
+
   it.each([
     ["un dominio raro", ["--domain", "pypi.org; rm -rf /"]],
     ["una feature rara", ["--feature", "python $(id)"]],
