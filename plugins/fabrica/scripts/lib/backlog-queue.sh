@@ -210,20 +210,23 @@ flag_needs_human() {  # issue number, comment body
   gh issue comment "$n" --body "$body" || true
 }
 
-# True if some PR (any state) declares "Closes #N" in its body, OR if `gh`
-# itself could not be asked (rate limit, transient network error): a worker
-# that already shipped a PR must never be flagged needs-human just because
-# the check that would have proven it failed. Deliberately not keyed on
-# branch name: `impl-N` and `worktree-impl-N` coexist (#62), so matching by
-# head produces false negatives for work that is already sitting in an open
-# PR.
+# True if an open or merged PR of this repo, from `impl-N` or
+# `worktree-impl-N` (both coexist, #62), declares "Closes #N" in its body,
+# OR if `gh` itself could not be asked (rate limit, transient network error):
+# a worker that already shipped a PR must never be flagged needs-human just
+# because the check that would have proven it failed.
 pr_declares_closes() {  # issue number
   local n="$1" count
   # La lista de PRs, no la búsqueda: el índice de búsqueda de GitHub tarda
   # unos segundos en ver un PR recién abierto, y justo ahí se pregunta. Los
   # 100 más recientes alcanzan: el PR que importa es el que se acaba de abrir.
-  if ! count=$(gh pr list --state all --limit 100 --json body \
-      --jq "[.[] | select((.body // \"\") | test(\"(?i)\\\\b(close[sd]?|fix(e[sd])?|resolve[sd]?) #$n\\\\b\"))] | length" 2>/dev/null); then
+  # Solo un PR de este repo, abierto o mergeado, desde la rama de la issue
+  # (impl-N o worktree-impl-N): uno de un fork, uno cerrado sin mergear o el
+  # de otra rama no la entregan.
+  if ! count=$(gh pr list --state all --limit 100 --json body,headRefName,isCrossRepository,state \
+      --jq "[.[] | select(.isCrossRepository | not) | select(.state != \"CLOSED\")
+             | select(.headRefName | test(\"^(worktree-)?impl-$n\$\"))
+             | select((.body // \"\") | test(\"(?i)\\\\b(close[sd]?|fix(e[sd])?|resolve[sd]?) #$n\\\\b\"))] | length" 2>/dev/null); then
     echo "⚠ no pude comprobar si #$n ya tiene PR (falla de gh); no lo marco needs-human por si acaso" >&2
     return 0
   fi

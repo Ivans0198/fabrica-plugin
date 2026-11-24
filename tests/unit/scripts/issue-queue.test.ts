@@ -98,6 +98,12 @@ case "$1 $2" in
     case "$*" in *--head*) echo "\${FAKE_HEAD_PR:-}"; exit 0 ;; esac
     # La búsqueda de GitHub tarda en ver un PR recién abierto: con
     # FAKE_SEARCH_LAG, --search todavía no lo encuentra y la lista sí.
+    # FAKE_PR_JSON: los PRs como los da gh, filtrados con el --jq de verdad.
+    if [ -n "\${FAKE_PR_JSON:-}" ]; then
+      expr=""; prev=""
+      for a in "$@"; do [ "$prev" = --jq ] && expr="$a"; prev="$a"; done
+      jq -r "$expr" <<<"$FAKE_PR_JSON"; exit $?
+    fi
     case "$*" in
       *--search*) if [ -n "\${FAKE_SEARCH_LAG:-}" ]; then echo 0; else echo "\${FAKE_PR_COUNT:-0}"; fi ;;
       *) echo "\${FAKE_PR_COUNT:-0}" ;;
@@ -508,6 +514,60 @@ describe("comandos de la cola", () => {
     },
     TIMEOUT,
   );
+
+  // Cualquier PR con "Closes #5" contaba: uno de un fork, uno cerrado sin
+  // mergear o el de otra rama daban la issue por entregada.
+  describe("qué PR cuenta como el de la issue", () => {
+    const pr = (fields: object) =>
+      JSON.stringify([
+        {
+          body: "Closes #5",
+          headRefName: "impl-5",
+          isCrossRepository: false,
+          state: "OPEN",
+          ...fields,
+        },
+      ]);
+
+    it.each([
+      ["abierto desde impl-5", {}],
+      ["mergeado", { state: "MERGED" }],
+      ["desde worktree-impl-5", { headRefName: "worktree-impl-5" }],
+    ])(
+      "cuenta un PR %s",
+      async (_name, fields) => {
+        const { repo, env } = await project();
+
+        const { code } = await run(["done", "5"], repo, {
+          ...env,
+          FAKE_PR_JSON: pr(fields),
+        });
+
+        expect(code).toBe(0);
+      },
+      TIMEOUT,
+    );
+
+    it.each([
+      ["de un fork", { isCrossRepository: true }],
+      ["cerrado sin mergear", { state: "CLOSED" }],
+      ["de otra rama", { headRefName: "arreglo-mio" }],
+      ["de la issue 15", { headRefName: "impl-15" }],
+    ])(
+      "no cuenta un PR %s",
+      async (_name, fields) => {
+        const { repo, env } = await project();
+
+        const { code } = await run(["done", "5"], repo, {
+          ...env,
+          FAKE_PR_JSON: pr(fields),
+        });
+
+        expect(code).toBe(1);
+      },
+      TIMEOUT,
+    );
+  });
 
   describe("fabrica-cleanup", () => {
     const worktree = (repo: string, n: number) =>
