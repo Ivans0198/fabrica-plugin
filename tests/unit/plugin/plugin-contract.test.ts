@@ -336,6 +336,33 @@ describe("planeación con Spec Kit", () => {
     expect(body).toMatch(/@fontsource/);
   });
 
+  // El Stop gate corre el e2e con FABRICA_IGNORE_SNAPSHOTS=1: sin esta línea
+  // en la config, Playwright la ignora y el gate sigue comparando capturas.
+  it("el bootstrap pone ignoreSnapshots con FABRICA_IGNORE_SNAPSHOTS en playwright.config.ts", () => {
+    const body = read("skills/bootstrap/SKILL.md");
+
+    expect(body).toContain(
+      "ignoreSnapshots: !!process.env.FABRICA_IGNORE_SNAPSHOTS",
+    );
+  });
+
+  // El ui-reviewer pedía `npm run ui:screenshots`, un script que el bootstrap
+  // nunca crea: la revisión de UI no podía sacar ni una captura.
+  it("el ui-reviewer saca las capturas con fabrica-ui-screenshots", () => {
+    const body = read("agents/ui-reviewer.md");
+
+    expect(body).toContain("fabrica-ui-screenshots");
+    expect(body).not.toContain("ui:screenshots");
+  });
+
+  // La revisión de UI y una corrida de Playwright usan el mismo puerto: si
+  // corren a la vez, el preflight ve un servidor ajeno y la revisión se cae.
+  it("las reglas lanzan el ui-reviewer sin Playwright corriendo a la vez", () => {
+    const body = read("rules/fabrica.md");
+
+    expect(body).toMatch(/ui-reviewer[^\n]*\n?[^\n]*alone|never while/i);
+  });
+
   it("el aviso de falla de la nube nombra la GitHub App", () => {
     const workflow = readFileSync(
       path.join(REPO_ROOT, ".github/workflows/claude-backlog.yml"),

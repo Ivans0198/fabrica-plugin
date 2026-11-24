@@ -66,7 +66,7 @@ describe("la CI y el Stop gate corren la misma lista", () => {
       ...readFileSync(
         path.join(PLUGIN_ROOT, "hooks/stop-gate.sh"),
         "utf8",
-      ).matchAll(/^run_check (\w+) /gm),
+      ).matchAll(/^(?:\w+=\S+ )?run_check (\w+) /gm),
     ].map((m) => m[1]);
     const ci = allSteps()
       .map((s) => /^fabrica-cmd (\w+)$/.exec(s.run?.trim() ?? "")?.[1])

@@ -39,6 +39,12 @@ enforces this; you cannot end the session with failing checks.
    the app's URL, that is a blocker, not a nuisance: a server you did not
    start may belong to another project, and every screenshot taken against it
    is meaningless. Free the port or set `APP_URL`; never review around it.
+   The project's own visual baselines (`tests/ui.spec.ts-snapshots/`) are
+   not compared here: the Stop gate runs e2e with
+   `FABRICA_IGNORE_SNAPSHOTS=1`. A UI story changes them on purpose; never
+   regenerate them yourself. A person accepts them from the PR's visual job
+   with `visual-baselines.yml`, so say in the PR description which
+   screenshots change and why.
    The `fabrica:ui-reviewer` subagent (APPROVED) is additionally required according
    to the UI-review policy in `factory.json` → `review.uiReview`:
    `"always"` = every UI change; `"label"` (default, and the value when the
@@ -207,7 +213,10 @@ Execute these steps IN ORDER:
 
 5. **Review**: launch `fabrica:code-reviewer` (and `fabrica:ui-reviewer` ONLY when the UI-review
    policy in `factory.json` → `review.uiReview` applies; see Definition of
-   Done item 4). The reviewer works in a clean context:
+   Done item 4). Launch the ui-reviewer alone, never while Playwright, a
+   dev server or another subagent that runs them is still going: they all
+   use the app's port, and the ui-reviewer refuses a server it did not
+   start. The reviewer works in a clean context:
    - **Model:** pass `model` = `factory.json` → `models.codeReviewer`
      (`models.uiReviewer` for the ui-reviewer). If the key is missing, do not
      pass `model`.

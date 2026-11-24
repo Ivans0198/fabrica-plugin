@@ -264,8 +264,12 @@ run_check build "Build"
 
 # Los tests del kit no corren aquí: viven y corren en el repo del plugin.
 
-# 5. E2E: visual regression + accessibility, when the project has them.
-run_check e2e "E2E (visual/a11y)"
+# 5. E2E: accesibilidad, comportamiento y fidelidad, cuando el proyecto los
+# tiene. Las capturas propias (tests/ui.spec.ts-snapshots) no se comparan
+# aquí: cada historia con UI las cambia y aceptarlas es de una persona, con
+# el job visual de la CI y visual-baselines.yml. Compararlas aquí dejaba al
+# worker sin salida. playwright.config.ts lee la variable (ignoreSnapshots).
+FABRICA_IGNORE_SNAPSHOTS=1 run_check e2e "E2E (a11y/fidelidad)"
 
 rm -f "$COUNTER_FILE"
 # Solo un árbol limpio deja HEAD como verificado: con cambios sin commitear,

@@ -37,12 +37,14 @@ server this factory did not start.
 One command does all of it, in a single process:
 
 ```bash
-npm run ui:screenshots
+fabrica-ui-screenshots
 ```
 
 It boots the dev server, captures every viewport (375, 768, 1440) in BOTH
-themes, and shuts the server down, even when a capture fails. The six PNGs land
-in `.factory/ui-screenshots/`, named `ui-<viewport>-<light|dark>.png`.
+themes, and shuts the server down, even when a capture fails. The PNGs land
+in `.factory/ui-screenshots/`, named `ui-<viewport>-<light|dark>.png`. If a
+viewport's light and dark captures come out identical, the site has no dark
+theme: it keeps only the light one and says so. That is not a defect.
 
 **Never split this into several Bash calls.** A dev server started in one call
 does not survive to the next one, and that is exactly why this command exists:
@@ -50,13 +52,8 @@ it keeps the whole lifecycle inside one process. If you find yourself reaching
 for the Playwright MCP browser to click a theme toggle, stop: the command
 already gave you both themes.
 
-The command also refuses to hand you a false green. It fails loudly if a
-capture comes out blank, and if the light and dark captures of a viewport are
-byte-identical, because that means the theme never applied and you would be
-reviewing the same image twice.
-
 For a screen other than home, pass its path:
-`npm run ui:screenshots -- --path /settings`.
+`fabrica-ui-screenshots --path /settings`.
 
 **If the preflight exits non-zero, stop there.** Do not take screenshots, do
 not try another port, and never set `FABRICA_TRUST_EXISTING_SERVER` (that
@@ -95,11 +92,15 @@ these baseline heuristics even if design-system.md is missing:
 Run whatever automated checks exist and include failures in the report:
 
 ```bash
-npx playwright test        # e.g. npx playwright test (visual regression + axe)
+FABRICA_IGNORE_SNAPSHOTS=1 npx playwright test   # axe, behaviour, fidelity
 ```
 
+The project's own baselines (`tests/ui.spec.ts-snapshots/`) are left out on
+purpose: a UI story changes them, and a person accepts them in the PR. Your
+screenshots are what you judge.
+
 The suite boots its own dev server and refuses to reuse a foreign one, so run
-it after `ui-preflight.sh down`. If it reports the port is already in use,
+it after `fabrica-ui-screenshots` has finished. If it reports the port is already in use,
 that is the same hazard as above: report it, do not work around it.
 
 ## Report format
