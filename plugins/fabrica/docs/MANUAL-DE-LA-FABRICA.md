@@ -230,8 +230,6 @@ Ninguno impide terminar un proyecto; algunos te cuestan un paso a mano.
   cerca de un 1% de las de la CI; la que vale es la de la CI.
 - **Las menciones `@claude` no traen Chromium.** En un proyecto con
   Playwright, Claude lo instala a mano dentro del job.
-- **La guía no explica** el plan maestro, qué es `factoryEpic`, ni cómo
-  retomar una issue en `needs-human` (está en Cuando algo falla).
 - **Con `claude -p` en un repo nunca abierto a mano**, Claude ignora los
   permisos del proyecto ("workspace not trusted"). Abre `claude` una vez en
   el repo antes de usarlo en scripts.

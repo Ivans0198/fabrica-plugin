@@ -431,6 +431,41 @@ describe("planeación con Spec Kit", () => {
     });
   });
 
+  // Lo que la guía no explicaba en la prueba con REFASTIDIOSO (bitácora,
+  // 2026-11-24 y 25): cada uno costó un paso a ciegas.
+  describe("la guía cubre lo que faltó en REFASTIDIOSO", () => {
+    const guide = () => read("docs/GUIA-DE-LA-FABRICA.md");
+
+    it("cómo retomar una issue en needs-human", () => {
+      expect(guide()).toContain(
+        "gh issue edit N --remove-label needs-human --remove-label in-progress --add-label pending",
+      );
+    });
+
+    it("que claude -p ignora los permisos de un repo que nunca se abrió", () => {
+      expect(guide()).toMatch(/claude -p[\s\S]{0,300}not been trusted/);
+    });
+
+    it("el plan maestro y que spec encadena plan y tasks", () => {
+      expect(guide()).toContain("docs/plan-maestro.md");
+      expect(guide()).toMatch(/encadena[\s\S]{0,120}\/fabrica:plan/);
+    });
+
+    it("qué es factoryEpic y cuándo llenarlo", () => {
+      expect(guide()).toMatch(/`factoryEpic`[\s\S]{0,400}incidente/);
+    });
+
+    it("gh auth login en el contenedor sin el apuro del código", () => {
+      expect(guide()).toMatch(/docker exec -it[^\n]*gh auth login/);
+    });
+  });
+
+  it("fabrica:publish avisa antes de pedir permiso para salir a internet", () => {
+    const body = read("skills/publish/SKILL.md");
+
+    expect(body).toMatch(/permiso para salir\s+a internet/);
+  });
+
   it("el aviso de falla de la nube nombra la GitHub App", () => {
     const workflow = readFileSync(
       path.join(REPO_ROOT, ".github/workflows/claude-backlog.yml"),
