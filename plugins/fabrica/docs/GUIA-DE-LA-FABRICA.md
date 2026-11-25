@@ -341,6 +341,12 @@ workflows de la nube leen el archivo cada vez, y el worker lanza a cada
 revisor con su modelo. Los valores son nombres de modelo: `sonnet`, `opus`,
 `haiku`. `/fabrica:bootstrap` te pregunta esto al crear cada proyecto.
 
+**`/fabrica:backlog` en tu sesión usa el modelo de tu sesión**, no
+`models.worker`: ese valor sólo llega a los workers de `fabrica-backlog` y a
+la nube. Para que el código lo escriba el modelo de `worker`, abre la sesión
+con él: `claude --model sonnet "/fabrica:backlog"`. La fábrica te avisa si no
+coinciden.
+
 > 💡 Ojo también con tu modelo personal: si tu `settings.json` usa la
 > variante `[1m]` (contexto de 1 millón), cada sesión consume mucho más
 > rápido. Para el trabajo de fábrica, la variante estándar sobra.
@@ -365,6 +371,11 @@ Stop gate no las compara (corre el e2e con `FABRICA_IGNORE_SNAPSHOTS=1`).
 Las compara el job visual del PR: mira su artefacto `visual-diff` y, si está
 bien, acéptalas con
 `gh workflow run visual-baselines.yml --ref <rama-del-PR> -f reviewed_run_url=<run>`.
+El commit con las capturas lo empuja un bot, y GitHub deja sus corridas en
+`action_required`: hay que aprobarlas en el PR (**Approve and run**). Para
+saltarte ese clic, guarda en el repo el secreto `FABRICA_PUSH_TOKEN`, un
+token tuyo con permiso de escritura en ese repo (un fine-grained token con
+**Contents: Read and write**); con él las corridas arrancan solas.
 Un `playwright.config.ts` de antes de la 0.5.10 no lee la variable: agrégale
 `ignoreSnapshots: !!process.env.FABRICA_IGNORE_SNAPSHOTS,` junto a
 `globalSetup`.

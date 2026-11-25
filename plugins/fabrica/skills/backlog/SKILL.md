@@ -20,6 +20,11 @@ mensaje y para.
 
 Una issue por invocación, con la persona mirando.
 
+El código lo escribe esta sesión, con su modelo: `factory.json` →
+`models.worker` sólo llega a los workers de abajo. Si esta sesión no corre con
+ese modelo, dilo en una línea al empezar, con el comando para la próxima
+(`claude --model <models.worker> "/fabrica:backlog"`), y sigue.
+
 1. **La issue.** Si la persona nombró una, es esa. Si no, `fabrica-next-issue`.
    Si sale con 1, no hay nada elegible: dilo y para. Si sale con 3, no pudo
    leer la cola: muestra su mensaje y para.
@@ -35,8 +40,8 @@ Una issue por invocación, con la persona mirando.
    PR que cierre la issue: ábrelo, o ríndete con el paso 6.
 6. **Para rendirte**, `fabrica-release N --needs-human "motivo"`. Si la persona
    pide dejarla para después, `fabrica-release N --pending`.
-7. **Al terminar**, `ExitWorktree` con `keep` y resume: PR, `needs-human` o
-   devuelta a la cola. Para la siguiente issue, sugiere `/clear` y volver a
+7. **Al terminar**, `ExitWorktree` con `keep` y resume en el idioma de
+   `factory.json` → `docLang`: PR, `needs-human` o devuelta a la cola. Para la siguiente issue, sugiere `/clear` y volver a
    llamar `/fabrica:backlog`: cada issue empieza con el contexto limpio.
    Los worktrees de issues ya cerradas se borran con `fabrica-cleanup`.
 
