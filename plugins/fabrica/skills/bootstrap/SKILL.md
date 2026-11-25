@@ -523,6 +523,8 @@ tiene dentro, para que sepan que no van a repetir lo ya conversado:
 > Después siguen `/fabrica:plan` y `/fabrica:tasks` en la misma rama. Cuando
 > mergees ese PR, `/fabrica:issues` crea las issues (ves la tabla antes de que
 > cree nada), y `/fabrica:backlog` suelta la fábrica.
+> Cuando la primera épica esté mergeada y quieras verla en internet,
+> `/fabrica:publish` te guía para publicarla (Vercel, por defecto).
 >
 > Si prefieres seguir aquí, escribe tú `/fabrica:spec usa docs/brief.md` en
 > esta misma sesión.

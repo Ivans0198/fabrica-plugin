@@ -27,7 +27,10 @@ planeación se hace en una sesión interactiva y para.
    tabla de épicas (alcance, tamaño, dependencias), los carriles en paralelo y
    el porqué del orden. Que la persona lo apruebe, y recién después haz una
    spec por épica, empezando por la primera. Prefiere pocas épicas con varias
-   historias a muchas épicas chicas.
+   historias a muchas épicas chicas. Publicar (el hosting, el dominio) no es
+   una épica: no hay código que un worker escriba. Ponlo en el plan maestro
+   como un paso aparte, después de la primera épica, que se hace con
+   `/fabrica:publish`.
 3. **¿Se retoma?** Si existe la rama `spec-<N>` (local o en `origin`), con eso
    basta para retomar, aunque todavía no haya carpeta: no crees otra épica,
    cámbiate a esa rama y sigue desde el paso que falte. Si la persona dice que

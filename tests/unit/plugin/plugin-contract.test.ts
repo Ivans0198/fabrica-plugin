@@ -387,6 +387,50 @@ describe("planeación con Spec Kit", () => {
     expect(session).toContain("claude --model");
   });
 
+  // REFASTIDIOSO quedó listo sin que la fábrica dijera cómo publicarlo: el
+  // deploy a Vercel se hizo a mano y la guía no lo mencionaba.
+  describe("publicar", () => {
+    it("fabrica:publish solo lo arranca una persona, en una sesión", () => {
+      const body = read("skills/publish/SKILL.md");
+
+      expect(body).toMatch(/^name: publish$/m);
+      expect(body).toMatch(/^disable-model-invocation: true$/m);
+      expect(body).toMatch(/headless/);
+    });
+
+    it("fabrica:publish verifica el build, guarda prodUrl y prueba producción", () => {
+      const body = read("skills/publish/SKILL.md");
+
+      expect(body).toContain("fabrica-cmd build");
+      expect(body).toContain("prodUrl");
+      expect(body).toContain("APP_URL");
+      expect(body).toMatch(/Vercel/);
+    });
+
+    it("fabrica:publish deja a la persona la cuenta, los permisos y los secretos", () => {
+      const body = read("skills/publish/SKILL.md");
+
+      expect(body).toMatch(/nunca (creas|crees) la cuenta/i);
+      expect(body).toMatch(/solo (a|al) (este )?repo/i);
+      expect(body).toMatch(/secret/i);
+    });
+
+    it("la spec no hace de la publicación una épica, la manda a fabrica:publish", () => {
+      expect(read("skills/spec/SKILL.md")).toContain("/fabrica:publish");
+    });
+
+    it("el handoff del bootstrap nombra fabrica:publish", () => {
+      expect(read("skills/bootstrap/SKILL.md")).toContain("/fabrica:publish");
+    });
+
+    it("la guía y el manual explican fabrica:publish", () => {
+      expect(read("docs/GUIA-DE-LA-FABRICA.md")).toContain("/fabrica:publish");
+      expect(read("docs/MANUAL-DE-LA-FABRICA.md")).toContain(
+        "/fabrica:publish",
+      );
+    });
+  });
+
   it("el aviso de falla de la nube nombra la GitHub App", () => {
     const workflow = readFileSync(
       path.join(REPO_ROOT, ".github/workflows/claude-backlog.yml"),
