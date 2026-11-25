@@ -358,6 +358,59 @@ describe("comandos de la cola", () => {
     TIMEOUT,
   );
 
+  // Un worktree nuevo no trae node_modules: sin dependencias fallaban todas
+  // las pruebas y el worker gastaba tiempo en descubrirlo (refastidioso #8).
+  it(
+    "fabrica-claim instala las dependencias con commands.install en el worktree nuevo",
+    async () => {
+      const { repo, env } = await project();
+      await writeFile(
+        path.join(repo, "factory.json"),
+        JSON.stringify({
+          commands: {
+            install: [
+              "node",
+              "-e",
+              "require('fs').writeFileSync('instalado', process.cwd())",
+            ],
+          },
+        }),
+      );
+      await git(repo, "git commit -qam install");
+
+      const { code, stdout, stderr } = await run(["claim", "5"], repo, env);
+
+      expect(code, stderr).toBe(0);
+      const worktree = stdout.trim().split("\n").pop()!;
+      expect(worktree).toBe(path.join(repo, ".claude/worktrees/impl-5"));
+      expect(existsSync(path.join(worktree, "instalado"))).toBe(true);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "fabrica-claim avisa y sigue si commands.install falla",
+    async () => {
+      const { repo, env } = await project();
+      await writeFile(
+        path.join(repo, "factory.json"),
+        JSON.stringify({
+          commands: { install: ["node", "-e", "process.exit(1)"] },
+        }),
+      );
+      await git(repo, "git commit -qam install");
+
+      const { code, stdout, stderr } = await run(["claim", "5"], repo, env);
+
+      expect(code).toBe(0);
+      expect(stdout.trim().split("\n").pop()).toBe(
+        path.join(repo, ".claude/worktrees/impl-5"),
+      );
+      expect(stderr).toMatch(/commands\.install/);
+    },
+    TIMEOUT,
+  );
+
   it(
     "fabrica-claim sale con 2 y suelta el reclamo si la issue ya es de otra persona",
     async () => {

@@ -349,6 +349,26 @@ ensure_worker_worktree() {  # issue number
   fi
 }
 
+# Un worktree nuevo no trae las dependencias (node_modules y parecidos están
+# ignorados por git): sin ellas fallan los tests, y el worker gastaba tiempo
+# en descubrirlo. Corre commands.install dentro del worktree. Si no hay o
+# falla, avisa y sigue: el reclamo ya está hecho.
+install_worktree_deps() {  # issue number
+  local wt_dir status
+  wt_dir=$(worktree_dir_for "$1")
+  factory_read_command install && status=0 || status=$?
+  [ "$status" -eq 3 ] && return 0
+  if [ "$status" -ne 0 ]; then
+    echo "⚠ no hay commands.install en factory.json; instala las dependencias en $wt_dir a mano" >&2
+    return 0
+  fi
+  echo "Instalando dependencias en $wt_dir (commands.install)…" >&2
+  if ! (cd "$wt_dir" && "${FACTORY_CMD[@]}" < /dev/null) >&2; then
+    echo "⚠ commands.install falló en $wt_dir; córrelo ahí (fabrica-cmd install) antes de los tests" >&2
+  fi
+  return 0
+}
+
 # Reclama la issue por assignee y la vuelve a leer: si otra persona (un
 # compañero, la nube) ganó la carrera, suelta el reclamo.
 # Devuelve 0 si la issue es nuestra y 2 si es de otro. Sin usuario de gh (ME

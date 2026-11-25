@@ -259,10 +259,12 @@ maybe_automerge() {  # issue number, labels at start (one per line)
 # Launches the worker for issue $1 in the background and sets WORKER_PID.
 # Pulled out of main() so tests can drive it directly against a fake `claude`.
 run_worker() {
-  local n="$1" wt_dir
+  local n="$1" wt_dir fresh=""
   wt_dir=$(worktree_dir_for "$n")
+  [ -d "$wt_dir" ] || fresh=1
   ensure_worker_worktree "$n"
   copy_env_files "$n"
+  [ -z "$fresh" ] || install_worktree_deps "$n"
   reset_gate_state "$n"
   # Runs from inside the worktree instead of passing `--worktree` to claude,
   # so the branch name stays the one `ensure_worker_worktree` decided. `exec`
