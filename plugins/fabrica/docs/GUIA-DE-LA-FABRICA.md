@@ -101,6 +101,19 @@ El repositorio de GitHub ya lo creaste tú con el Comando 1; bootstrap solo
 verifica y te dice a qué repo va a escribir. El **tablero** (que es otra cosa)
 no se crea solo: te lo ofrece al final, en la Fase 4.
 
+**`factoryEpic`, el único hueco que deja.** Si un merge deja desajustadas las
+capturas en `main`, la fábrica abre un incidente y lo cuelga de una épica de
+fábrica y herramientas. Esa épica no existe todavía: créala cuando quieras
+(`gh issue create --title "[Epic] Fábrica y herramientas" --label epic`) y
+pon su número en `factory.json` → `factoryEpic`. Mientras tanto, si pasa,
+el workflow te lo dice en vez de colgar el incidente de cualquier issue.
+
+> 💡 **¿Usas `claude -p` en scripts?** En un repo que nunca abriste con
+> `claude` en modo interactivo, Claude ignora los permisos del proyecto y
+> avisa "Ignoring … this workspace has not been trusted". Abre `claude` una
+> vez en la carpeta, acepta la confianza, y desde ahí `claude -p` usa
+> `.claude/settings.json`.
+
 **Comando 3: la llave de la nube** (los secretos van por repo; hay que
 plantarla en cada uno):
 
@@ -156,7 +169,14 @@ después hasta 5 más para aclarar lo ambiguo (tú eres el dueño del producto,
 así que responde lo que quieres). Queda en `specs/<número>-<nombre>/spec.md`,
 en un PR en borrador.
 
-Después, en la misma sesión:
+**¿Tu documento trae varias funcionalidades?** Entonces, antes de la spec, te
+propone un **plan maestro** en `docs/plan-maestro.md`: la tabla de épicas, su
+tamaño, sus dependencias y el orden. Lo apruebas y sigue con la spec de la
+primera épica; las demás van después, una por una, con `/fabrica:spec`.
+
+Cuando respondes la última pregunta, la spec encadena sola `/fabrica:plan` y
+`/fabrica:tasks` en la misma sesión, sin que los escribas. Solo para si queda
+una duda sin resolver o si le pides parar; entonces sigues tú:
 
 ```
 /fabrica:plan [indicaciones técnicas, si tienes]
@@ -237,6 +257,10 @@ claude                                                # entra a tu cuenta
 claude plugin marketplace add <owner>/fabrica-plugin  # el plugin, desde GitHub
 claude plugin install fabrica@fabrica-local --scope project
 ```
+
+El código de `gh auth login` vence a los 15 minutos. Si no alcanzas a
+autorizarlo, hazlo desde tu terminal, a tu ritmo:
+`docker exec -it <contenedor> gh auth login` (el id sale en `docker ps`).
 
 Sin VS Code, levántalo con
 `npx -y @devcontainers/cli@0.91.0 up --workspace-folder .`: la 0.80.0 se
@@ -436,6 +460,12 @@ con squash: avisa en vez de borrar trabajo.
 - Si la fábrica se atasca con una tarea (lo intenta varias veces y no puede),
   le pone la etiqueta **`needs-human`** y deja un comentario explicando qué
   intentó. Búscalas con: `gh issue list --label needs-human`
+- **Para retomarla**, arregla lo que dice el comentario (un secreto, una
+  decisión, algo de `main`) y devuélvela a la cola:
+  `gh issue edit N --remove-label needs-human --remove-label in-progress --add-label pending`.
+  Después `/fabrica:backlog N`: sigue en su worktree `impl-N` desde donde
+  quedó, sin rehacer lo que ya estaba. Si su PR ya está en verde y solo
+  faltaba tu decisión, no hace falta: márcalo listo y mergéalo.
 - La fábrica no puede terminar con tests fallando mientras le queden intentos
   (el "Stop hook" la bloquea). Si agota los intentos, el portero la deja salir
   pero con obligación de marcar `needs-human` y prohibición de abrir/marcar
@@ -697,8 +727,8 @@ gh secret set CLAUDE_TOKEN_TU_USUARIO     # tu token personal (pegar token guard
 
 # Nueva funcionalidad (dentro de claude)
 /fabrica:spec lo que quiero construir      # crea la épica (con tu OK), la spec y el PR
-/fabrica:plan                               # plan técnico, en el mismo PR
-/fabrica:tasks                              # tareas con tests primero, en el mismo PR
+/fabrica:plan                               # solo si la spec paró: plan técnico, en el mismo PR
+/fabrica:tasks                              # solo si el plan paró: tareas con tests primero
 # ... revisar y mergear el PR de la spec ...
 /fabrica:issues <número de la épica>        # issues encadenadas, con tu OK
 

@@ -48,7 +48,10 @@ con cada push a la rama base.
       carpeta de salida del paso 2.
    4. Cargar las variables de entorno del paso 2, si hay.
    5. **Deploy**, y pegarte la URL de producción.
-5. **Verifica producción.**
+5. **Verifica producción.** Antes, avísale que vas a pedir permiso para salir
+   a internet (el `curl` y las pruebas contra la URL): en modo automático
+   puede negarse. Si se niega, no lo rodees: pídele que abra la URL en
+   escritorio y en el celular, y anota en el PR lo que no verificaste.
    - `curl -sI <url>` responde 200.
    - Si las pruebas del proyecto leen `APP_URL` (búscalo en `tests/`),
      córrelas contra producción:
