@@ -255,6 +255,28 @@ describe("fabrica-devcontainer", () => {
     TIMEOUT,
   );
 
+  // gh run view --log-failed baja el log de productionresultssaN.blob.core.
+  // windows.net, que el firewall cortaba: el worker no podía ver qué falló
+  // en la CI (refastidioso-web #9, 2026-11-25). Solo esas cuentas de GitHub,
+  // nunca *.blob.core.windows.net, que deja salir a cualquier cuenta de Azure.
+  it(
+    "deja bajar los logs de la CI: las cuentas de Azure de GitHub Actions, una por una",
+    async () => {
+      const dir = project();
+      await run(dir, []);
+      const allowed = domains(dir);
+
+      for (let n = 0; n <= 19; n++) {
+        expect(allowed).toContain(
+          `productionresultssa${n}.blob.core.windows.net`,
+        );
+      }
+      expect(allowed.filter((d) => d.includes("*"))).toEqual([]);
+      expect(allowed).not.toContain("blob.core.windows.net");
+    },
+    TIMEOUT,
+  );
+
   // @devcontainers/cli 0.80.0 se colgaba con Docker 29 después de "Container
   // started" y nunca corría el firewall; npx usaba esa versión de su caché.
   // Con la 0.91.0 el mismo up termina solo (refastidioso-web, 2026-11-25).
