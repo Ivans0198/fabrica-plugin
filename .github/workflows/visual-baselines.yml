@@ -20,9 +20,10 @@
 # desajustado (el incidente que abre report-visual-incident.sh): ahí `--ref
 # main` es lo correcto.
 #
-# El push del job `accept` deja la corrida de `compare` que dispara en
-# `action_required`, porque la empuja `github-actions[bot]`. Hasta que alguien
-# la apruebe, el check no está verde: está sin arrancar.
+# El push del job `accept` va con `FABRICA_PUSH_TOKEN` si el proyecto lo
+# tiene: un token de una persona con permiso de escritura en el repo, y así
+# las corridas del commit arrancan solas. Sin él empuja `github-actions[bot]`,
+# y esas corridas quedan en `action_required` hasta que alguien las apruebe.
 #
 # El disparo en `push` a `main` existe porque nada impide mergear con este
 # check en rojo si el repo no admite branch protection. Si `main` queda
@@ -46,6 +47,8 @@ on:
         default: ""
     secrets:
       FABRICA_PLUGIN_TOKEN:
+        required: false
+      FABRICA_PUSH_TOKEN:
         required: false
 
 permissions:
@@ -155,7 +158,7 @@ jobs:
         id: commit
         if: steps.update.outcome == 'failure'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.FABRICA_PUSH_TOKEN || github.token }}
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -170,11 +173,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          HAS_PUSH_TOKEN: ${{ secrets.FABRICA_PUSH_TOKEN != '' }}
         run: |
           branch="${GITHUB_REF#refs/heads/}"
           pr_number=$(gh pr list --head "$branch" --state open --json number --jq '.[0].number // empty')
           if [ -n "$pr_number" ]; then
-            gh pr comment "$pr_number" --body "✅ Línea base visual aceptada y empujada a esta rama. **Todavía no mergees**: espera a que \`compare\` corra sobre este commit y salga verde. Si aparece como \`action_required\`, apruébala primero, porque la empujó un bot y GitHub no la arranca sola. Mergear antes deja \`main\` con el código nuevo y la captura vieja."
+            body="✅ Línea base visual aceptada y empujada a esta rama. **Todavía no mergees**: espera a que \`compare\` corra sobre este commit y salga verde. Mergear antes deja \`main\` con el código nuevo y la captura vieja."
+            if [ "$HAS_PUSH_TOKEN" != "true" ]; then
+              body="$body
+
+          Las corridas de este commit quedan en \`action_required\` porque las empujó un bot: apruébalas con **Approve and run** en https://github.com/${GH_REPO}/pull/${pr_number}/checks. Para que arranquen solas la próxima vez, guarda en el repo el secreto \`FABRICA_PUSH_TOKEN\`: un token tuyo con permiso de escritura en este repo."
+            fi
+            gh pr comment "$pr_number" --body "$body"
           else
             echo "No encontré un PR abierto para la rama $branch; nadie a quien avisar." >&2
           fi

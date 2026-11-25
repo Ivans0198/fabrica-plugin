@@ -32,3 +32,4 @@ jobs:
       reviewed_run_url: ${{ inputs.reviewed_run_url }}
     secrets:
       FABRICA_PLUGIN_TOKEN: ${{ secrets.FABRICA_PLUGIN_TOKEN }}
+      FABRICA_PUSH_TOKEN: ${{ secrets.FABRICA_PUSH_TOKEN }}

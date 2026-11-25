@@ -195,6 +195,11 @@ describe("reusable workflows", () => {
       const { secrets } = callerJob(caller);
       if (["claude-backlog.yml", "claude-mentions.yml"].includes(caller)) {
         expect(secrets, caller).toBe("inherit");
+      } else if (caller === "visual-baselines.yml") {
+        expect(secrets, caller).toEqual({
+          FABRICA_PLUGIN_TOKEN: "${{ secrets.FABRICA_PLUGIN_TOKEN }}",
+          FABRICA_PUSH_TOKEN: "${{ secrets.FABRICA_PUSH_TOKEN }}",
+        });
       } else {
         expect(secrets, caller).toEqual({
           FABRICA_PLUGIN_TOKEN: "${{ secrets.FABRICA_PLUGIN_TOKEN }}",
