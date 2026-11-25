@@ -2,7 +2,7 @@
 
 La fábrica es un plugin de Claude Code que convierte una idea en software
 revisado y mergeado: tú decides qué se construye y apruebas el resultado, y
-ella planea, programa, prueba y revisa. Este manual cubre la versión 0.5.19 y
+ella planea, programa, prueba y revisa. Este manual cubre la versión 0.5.20 y
 lo aprendido al clonar y publicar un sitio real (el portafolio de
 REFASTIDIOSO). El detalle de cada pieza está en
 [`GUIA-DE-LA-FABRICA.md`](GUIA-DE-LA-FABRICA.md), y el flujo completo con
@@ -81,6 +81,8 @@ La fábrica arranca proyectos de Node y TypeScript, con cualquier framework
    ofrece el bootstrap y ábrelo con "Reopen in Container" de VS Code, o sin
    VS Code con `npx -y @devcontainers/cli@0.91.0 up --workspace-folder .`. Dentro,
    la primera vez: `gh auth login`, `claude` y la instalación del plugin.
+   Necesita Docker. Sin Docker se usa todo lo demás igual; solo que los
+   workers corren con permisos `auto` y a veces se niegan a un comando.
 
 El bootstrap deja todo en el repo: `CLAUDE.md`, `factory.json` (los
 comandos, los modelos y el idioma), las reglas en `.factory/` y tu idea en
@@ -215,7 +217,7 @@ bloquea un hook. Cualquier merge se deshace con el botón Revert del PR.
 
 ## Lo que todavía no hace
 
-Límites conocidos de la 0.5.19, sacados de la prueba con REFASTIDIOSO.
+Límites conocidos de la 0.5.20, sacados de la prueba con REFASTIDIOSO.
 Ninguno impide terminar un proyecto; algunos te cuestan un paso a mano.
 
 - **No publica sola.** `/fabrica:publish` te guía, pero la cuenta del

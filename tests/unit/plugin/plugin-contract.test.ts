@@ -458,6 +458,35 @@ describe("planeación con Spec Kit", () => {
     it("gh auth login en el contenedor sin el apuro del código", () => {
       expect(guide()).toMatch(/docker exec -it[^\n]*gh auth login/);
     });
+
+    it("que Docker es opcional y qué cambia sin él", () => {
+      expect(guide()).toMatch(/Sin Docker[\s\S]{0,600}PERMISSION_MODE=auto/);
+      expect(read("docs/FLUJO-DE-LA-FABRICA.md")).toMatch(
+        /Docker[\s\S]{0,300}opcional/,
+      );
+    });
+
+    it("cada forma de usarla, cómo se arranca y cómo se combinan", () => {
+      const part = guide().match(
+        /## Parte 3\.5: Las formas de usar la fábrica[\s\S]*?\n## /,
+      );
+      expect(part, "falta la Parte 3.5").not.toBeNull();
+      for (const form of [
+        "En tu sesión",
+        "Workers locales",
+        "Dev container",
+        "La nube",
+        "Menciones",
+      ]) {
+        expect(part![0]).toContain(`### ${form}`);
+      }
+      expect(part![0]).toContain("### Combinarlas");
+      expect(part![0]).toContain("fabrica-release N --pending");
+    });
+
+    it("el Paso 3 no dice que /fabrica:backlog lanza un worker", () => {
+      expect(guide()).not.toContain("lanza un Claude que la");
+    });
   });
 
   it("fabrica:publish avisa antes de pedir permiso para salir a internet", () => {
