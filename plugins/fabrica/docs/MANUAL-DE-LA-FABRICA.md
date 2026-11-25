@@ -77,7 +77,8 @@ La fábrica arranca proyectos de Node y TypeScript, con cualquier framework
      write** en el repo. Te ahorra un clic por historia (ver Capturas
      visuales).
 5. **Si quieres workers sin preguntas**, acepta el dev container que te
-   ofrece el bootstrap y ábrelo con "Reopen in Container" de VS Code. Dentro,
+   ofrece el bootstrap y ábrelo con "Reopen in Container" de VS Code, o sin
+   VS Code con `npx -y @devcontainers/cli@0.91.0 up --workspace-folder .`. Dentro,
    la primera vez: `gh auth login`, `claude` y la instalación del plugin.
 
 El bootstrap deja todo en el repo: `CLAUDE.md`, `factory.json` (los
@@ -203,7 +204,7 @@ sonnet. Cada respuesta corta a una pregunta de la spec con opus costó más de
 | `/fabrica:backlog` se niega a arrancar | El proyecto no está en la versión del plugin, o hay cambios sin subir en `factory.json`, `CLAUDE.md` o `.factory/` | Corre `fabrica-setup refresh`, combina cualquier `.fabrica-new` y commitea                                                                                          |
 | PR con `merge-conflict`                | Otro PR entró antes y ahora choca con `main`                                                                       | Resuélvelo a mano y revísalo contra las dos ramas                                                                                                                   |
 | CI con "repository not found"          | Falta `FABRICA_PLUGIN_TOKEN`                                                                                       | Planta el secreto en el repo                                                                                                                                        |
-| `devcontainer up` se queda colgado     | El CLI no termina después de "Container started" y no corre el firewall                                            | Ábrelo con VS Code, o corre dentro `sudo /usr/local/bin/init-firewall.sh` y configura `user.name` y `user.email`                                                    |
+| `devcontainer up` se queda colgado     | El CLI viejo (0.80.0, el que `npx` tenía en caché) no termina con Docker 29 y no corre el firewall                 | Usa `npx -y @devcontainers/cli@0.91.0 up --workspace-folder .` y configura dentro `user.name` y `user.email`                                                        |
 | Error de terminal que no entiendes     |                                                                                                                    | Copia el error completo y pégaselo a Claude                                                                                                                         |
 
 Un worker nunca puede mergear, empujar a `main` ni forzar un push: lo

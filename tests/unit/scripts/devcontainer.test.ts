@@ -255,6 +255,54 @@ describe("fabrica-devcontainer", () => {
     TIMEOUT,
   );
 
+  // @devcontainers/cli 0.80.0 se colgaba con Docker 29 después de "Container
+  // started" y nunca corría el firewall; npx usaba esa versión de su caché.
+  // Con la 0.91.0 el mismo up termina solo (refastidioso-web, 2026-11-25).
+  it(
+    "el aviso final pide @devcontainers/cli en la versión probada, no la que haya en caché",
+    async () => {
+      const dir = project();
+
+      const { code, stdout } = await run(dir, []);
+
+      expect(code).toBe(0);
+      expect(stdout).toContain(
+        "npx -y @devcontainers/cli@0.91.0 up --workspace-folder .",
+      );
+    },
+    TIMEOUT,
+  );
+
+  // `devcontainer up` sobre un contenedor que ya corre vuelve a correr el
+  // postStartCommand. El script vaciaba las reglas pero no las políticas: con
+  // OUTPUT en DROP de la vez anterior, la descarga de los rangos de GitHub se
+  // colgaba y el contenedor quedaba sin red y sin marca (refastidioso-web,
+  // 2026-11-25).
+  it(
+    "el firewall se puede correr dos veces: abre las políticas antes de bajar los rangos, con plazo",
+    async () => {
+      const dir = project();
+      await run(dir, []);
+      const firewall = readFileSync(
+        path.join(dir, ".devcontainer/init-firewall.sh"),
+        "utf8",
+      );
+      const download = firewall.indexOf("api.github.com/meta");
+
+      for (const table of ["iptables", "ip6tables"]) {
+        for (const chain of ["INPUT", "FORWARD", "OUTPUT"]) {
+          const reset = firewall.indexOf(`${table} -P ${chain} ACCEPT`);
+          expect(reset, `${table} -P ${chain} ACCEPT`).toBeGreaterThan(-1);
+          expect(reset).toBeLessThan(download);
+        }
+      }
+      expect(firewall).toMatch(
+        /curl[^\n]*--max-time \d+[^\n]*api\.github\.com\/meta/,
+      );
+    },
+    TIMEOUT,
+  );
+
   // El gh de Debian bookworm es 2.23.0, de 2023 (visto con Docker el
   // 2026-11-23): se instala del repositorio de GitHub.
   it(
