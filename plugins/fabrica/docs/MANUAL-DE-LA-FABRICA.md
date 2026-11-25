@@ -222,8 +222,6 @@ Ninguno impide terminar un proyecto; algunos te cuestan un paso a mano.
   hosting y sus permisos los das tú.
 - **El worker a veces afirma sin mirar.** Por ejemplo, predijo una captura
   en blanco que salió bien. Revisa el artefacto antes de creerle.
-- **Las capturas del contenedor no sirven para comparar en local.** Difieren
-  cerca de un 1% de las de la CI; la que vale es la de la CI.
 - **Con `claude -p` en un repo nunca abierto a mano**, Claude ignora los
   permisos del proyecto ("workspace not trusted"). Abre `claude` una vez en
   el repo antes de usarlo en scripts.

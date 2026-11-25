@@ -18,6 +18,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   iproute2 \
   dnsutils \
   aggregate \
+  fontconfig \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # gh del repositorio de GitHub: el de Debian bookworm es 2.23.0, de 2023.
@@ -31,6 +32,11 @@ RUN install -d -m 0755 /etc/apt/keyrings \
   && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 ENV DEVCONTAINER=true
+
+# Suavizado de letras por subpíxel, como en Ubuntu, el sistema del runner de
+# la CI: sin esto, las capturas del contenedor salían ~1% distintas en el
+# borde de cada letra, y la línea base visual no servía para comparar aquí.
+RUN ln -sf /usr/share/fontconfig/conf.avail/10-sub-pixel-rgb.conf /etc/fonts/conf.d/10-sub-pixel-rgb.conf
 
 # git entra a GitHub con la sesión de gh (en un volumen), también al clonar el
 # plugin privado. En el sistema y no en ~/.gitconfig, que no sobrevive a una

@@ -255,6 +255,27 @@ describe("fabrica-devcontainer", () => {
     TIMEOUT,
   );
 
+  // Las capturas del contenedor diferían ~1% de las de la CI en el borde de
+  // cada letra: Debian no trae el suavizado por subpíxel que Ubuntu (el runner
+  // de la CI) activa con 10-sub-pixel-rgb.conf. Con él, 0 píxeles
+  // (refastidioso-web, 2026-11-25).
+  it(
+    "activa el suavizado por subpíxel de Ubuntu, para que las capturas salgan como en la CI",
+    async () => {
+      const dir = project();
+      await run(dir, []);
+      const dockerfile = readFileSync(
+        path.join(dir, ".devcontainer/Dockerfile"),
+        "utf8",
+      );
+
+      expect(dockerfile).toContain(
+        "/usr/share/fontconfig/conf.avail/10-sub-pixel-rgb.conf /etc/fonts/conf.d/",
+      );
+    },
+    TIMEOUT,
+  );
+
   // gh run view --log-failed baja el log de productionresultssaN.blob.core.
   // windows.net, que el firewall cortaba: el worker no podía ver qué falló
   // en la CI (refastidioso-web #9, 2026-11-25). Solo esas cuentas de GitHub,
