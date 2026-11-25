@@ -10,6 +10,18 @@ IFS=$'\n\t'
 
 rm -f /run/fabrica-firewall-ok
 
+# Las políticas, abiertas mientras se arma la lista; se cierran más abajo.
+# `devcontainer up` sobre un contenedor que ya corre vuelve a correr este
+# script, y con OUTPUT en DROP de la vez anterior no podría bajar los rangos.
+iptables -P INPUT ACCEPT
+iptables -P FORWARD ACCEPT
+iptables -P OUTPUT ACCEPT
+if command -v ip6tables >/dev/null 2>&1 && ip6tables -L >/dev/null 2>&1; then
+  ip6tables -P INPUT ACCEPT
+  ip6tables -P FORWARD ACCEPT
+  ip6tables -P OUTPUT ACCEPT
+fi
+
 DOMAINS_FILE=/usr/local/etc/fabrica-allowed-domains.txt
 
 # El DNS interno de Docker, antes de vaciar las reglas.
@@ -62,7 +74,7 @@ fi
 ipset create allowed-domains hash:net
 
 echo "Rangos de GitHub..."
-gh_ranges=$(curl -s https://api.github.com/meta)
+gh_ranges=$(curl -s --max-time 30 https://api.github.com/meta)
 if ! echo "$gh_ranges" | jq -e '.web and .api and .git' >/dev/null; then
   echo "ERROR: api.github.com/meta no trajo los rangos de GitHub" >&2
   exit 1
