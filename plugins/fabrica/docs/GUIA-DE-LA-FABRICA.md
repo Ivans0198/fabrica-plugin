@@ -246,8 +246,11 @@ recibir APPROVED, y abre un **Pull Request en borrador**. Tú no haces nada.
 nada. Eso solo es seguro en un contenedor desechable, así que
 `fabrica-backlog` se niega a correr en ese modo fuera de uno.
 `fabrica-devcontainer` escribe uno en `.devcontainer/` (el bootstrap te lo
-ofrece). Su firewall bloquea toda salida menos GitHub, Anthropic y el registro
-de paquetes del stack, en `.devcontainer/allowed-domains.txt`, y dentro ya va
+ofrece). Su firewall bloquea toda salida menos GitHub (también donde guarda
+los logs de Actions, para que el worker vea qué falló en la CI), Anthropic y
+el registro de paquetes del stack, en `.devcontainer/allowed-domains.txt`. Un
+`.devcontainer/` de antes de la 0.5.19 no deja leer esos logs: regenéralo con
+`fabrica-devcontainer --force` (con tus opciones). Dentro ya va
 `PERMISSION_MODE=bypassPermissions`. Ábrelo con "Reopen in Container" de VS
 Code. La primera vez, dentro:
 
@@ -276,7 +279,9 @@ firewall no deja bajarlo. Si subes Playwright de versión, cambia
 `.devcontainer/` de antes de la 0.5.9 no lo trae: regenéralo con
 `fabrica-devcontainer --force --playwright` (con tus `--feature` y `--domain`).
 Que los tests no dependan de otros servidores: las fuentes, por ejemplo, van
-en el proyecto (`@fontsource`), no de Google Fonts.
+en el proyecto (`@fontsource`), no de Google Fonts. Desde la 0.5.19 el
+contenedor suaviza las letras como Ubuntu, el sistema de la CI, así que sus
+capturas salen iguales a las de la CI; uno anterior las sacaba ~1% distintas.
 
 `fabrica-backlog` solo acepta `bypassPermissions` si el firewall terminó bien
 (deja `/run/fabrica-firewall-ok`) y example.com no responde. `refresh` no

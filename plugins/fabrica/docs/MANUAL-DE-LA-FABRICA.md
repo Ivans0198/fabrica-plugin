@@ -2,7 +2,7 @@
 
 La fábrica es un plugin de Claude Code que convierte una idea en software
 revisado y mergeado: tú decides qué se construye y apruebas el resultado, y
-ella planea, programa, prueba y revisa. Este manual cubre la versión 0.5.18 y
+ella planea, programa, prueba y revisa. Este manual cubre la versión 0.5.19 y
 lo aprendido al clonar y publicar un sitio real (el portafolio de
 REFASTIDIOSO). El detalle de cada pieza está en
 [`GUIA-DE-LA-FABRICA.md`](GUIA-DE-LA-FABRICA.md), y el flujo completo con
@@ -215,19 +215,13 @@ bloquea un hook. Cualquier merge se deshace con el botón Revert del PR.
 
 ## Lo que todavía no hace
 
-Límites conocidos de la 0.5.18, sacados de la prueba con REFASTIDIOSO.
+Límites conocidos de la 0.5.19, sacados de la prueba con REFASTIDIOSO.
 Ninguno impide terminar un proyecto; algunos te cuestan un paso a mano.
 
 - **No publica sola.** `/fabrica:publish` te guía, pero la cuenta del
   hosting y sus permisos los das tú.
-- **El worker no lee los logs de la CI.** No puede confirmar qué falló en un
-  job; revísalo tú con `gh run view <id> --log-failed`.
 - **El worker a veces afirma sin mirar.** Por ejemplo, predijo una captura
   en blanco que salió bien. Revisa el artefacto antes de creerle.
-- **Las capturas del contenedor no sirven para comparar en local.** Difieren
-  cerca de un 1% de las de la CI; la que vale es la de la CI.
-- **Las menciones `@claude` no traen Chromium.** En un proyecto con
-  Playwright, Claude lo instala a mano dentro del job.
 - **Con `claude -p` en un repo nunca abierto a mano**, Claude ignora los
   permisos del proyecto ("workspace not trusted"). Abre `claude` una vez en
   el repo antes de usarlo en scripts.
