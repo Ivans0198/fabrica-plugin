@@ -199,6 +199,34 @@ describe("gate visual en main", () => {
     expect(runs).toMatch(/gh pr comment/);
   });
 
+  // Un push con el token del job deja las corridas del commit en
+  // action_required: una persona tenía que aprobarlas en cada historia.
+  it("empuja con FABRICA_PUSH_TOKEN cuando el proyecto lo tiene, para que los checks arranquen solos", () => {
+    const workflow = load(readFileSync(WORKFLOW_PATH, "utf8")) as {
+      on: {
+        workflow_call: { secrets: Record<string, { required?: boolean }> };
+      };
+    };
+    const push = stepsOf("accept").find((s) => s.run?.includes("git push"));
+
+    expect(workflow.on.workflow_call.secrets.FABRICA_PUSH_TOKEN?.required).toBe(
+      false,
+    );
+    expect(JSON.stringify(push)).toContain(
+      "secrets.FABRICA_PUSH_TOKEN || github.token",
+    );
+    expect(parseCaller().jobs.visual).toMatchObject({
+      secrets: { FABRICA_PUSH_TOKEN: "${{ secrets.FABRICA_PUSH_TOKEN }}" },
+    });
+  });
+
+  it("sin FABRICA_PUSH_TOKEN, el aviso del PR da el link para aprobar las corridas", () => {
+    const runs = runLines("accept");
+
+    expect(runs).toMatch(/\/pull\/\$\{?pr_number\}?\/checks/);
+    expect(runs).toMatch(/FABRICA_PUSH_TOKEN/);
+  });
+
   it("el job accept puede comentar en el PR", () => {
     const accept = parseWorkflow().jobs.accept;
 

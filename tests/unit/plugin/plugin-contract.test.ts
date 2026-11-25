@@ -363,6 +363,30 @@ describe("planeación con Spec Kit", () => {
     expect(body).toMatch(/ui-reviewer[^\n]*\n?[^\n]*alone|never while/i);
   });
 
+  // Con docLang: es, la mitad de los informes finales del backlog salieron en
+  // inglés (refastidioso, turnos 11 a 20): docLang sólo cubría documentos.
+  it("las reglas piden hablarle a la persona en docLang, no sólo escribir documentos", () => {
+    const body = read("rules/fabrica.md");
+
+    expect(body).toMatch(/replies to the person[\s\S]{0,80}`docLang`/);
+  });
+
+  it("el backlog resume la issue en el idioma de docLang", () => {
+    const body = read("skills/backlog/SKILL.md");
+
+    expect(body).toMatch(/resume en el idioma de[\s\S]{0,40}`docLang`/);
+  });
+
+  // En modo sesión el código lo escribe el modelo de la sesión: models.worker
+  // sólo llega a los workers. Con worker: sonnet, todo lo escribió opus.
+  it("el backlog en modo sesión avisa si la sesión no corre con models.worker", () => {
+    const body = read("skills/backlog/SKILL.md");
+    const session = body.split("## Con workers")[0];
+
+    expect(session).toContain("models.worker");
+    expect(session).toContain("claude --model");
+  });
+
   it("el aviso de falla de la nube nombra la GitHub App", () => {
     const workflow = readFileSync(
       path.join(REPO_ROOT, ".github/workflows/claude-backlog.yml"),

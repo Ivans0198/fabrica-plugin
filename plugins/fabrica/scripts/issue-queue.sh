@@ -72,8 +72,11 @@ case "${1:-}" in
       rm -f .factory/state/stop-gate-count .factory/gate-gave-up
       echo "$ROOT"
     else
+      fresh=""
+      [ -d "$(worktree_dir_for "$n")" ] || fresh=1
       ensure_worker_worktree "$n" >&2
       copy_env_files "$n"
+      [ -z "$fresh" ] || install_worktree_deps "$n"
       reset_gate_state "$n"
       echo "$ROOT/$(worktree_dir_for "$n")"
     fi

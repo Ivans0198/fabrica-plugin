@@ -269,6 +269,23 @@ run_check build "Build"
 # aquí: cada historia con UI las cambia y aceptarlas es de una persona, con
 # el job visual de la CI y visual-baselines.yml. Compararlas aquí dejaba al
 # worker sin salida. playwright.config.ts lee la variable (ignoreSnapshots).
+#
+# Antes espera a que el dev server de la revisión de UI se apague: ocupa el
+# puerto de la app y Playwright chocaría con él. Lo levanta ui-preflight.sh,
+# que deja su pid en .factory/ui-server.pid y lo apaga al terminar.
+UI_SERVER_PID_FILE=".factory/ui-server.pid"
+ui_review_server_alive() {
+  [ -f "$UI_SERVER_PID_FILE" ] && kill -0 "$(cat "$UI_SERVER_PID_FILE")" 2>/dev/null
+}
+port_wait="${FABRICA_GATE_PORT_WAIT:-180}"
+waited=0
+while ui_review_server_alive; do
+  if [ "$waited" -ge "$port_wait" ]; then
+    fail "❌ E2E did not run: the ui-reviewer's dev server (pid $(cat "$UI_SERVER_PID_FILE")) still holds the app's port after ${port_wait}s. Wait for the ui-reviewer to finish (it stops its own server), then try again. Never kill it by hand."
+  fi
+  sleep 1
+  waited=$((waited + 1))
+done
 FABRICA_IGNORE_SNAPSHOTS=1 run_check e2e "E2E (a11y/fidelidad)"
 
 rm -f "$COUNTER_FILE"

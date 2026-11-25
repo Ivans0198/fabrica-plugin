@@ -377,6 +377,9 @@ Specs, plans and tasks come from the `fabrica:spec`, `fabrica:plan` and
 the ones `fabrica:issues` creates, and PR descriptions follow the
 `fabrica:write-ticket` template. Default language: `factory.json` → `docLang`
 (es | en). When it is missing, or in doubt, match the language of the request.
+Your replies to the person, including the final summary of an issue, use
+`docLang` too: a slash command like `/fabrica:backlog` is not a request
+written in English.
 
 ### House style (applies to everything the factory writes)
 
