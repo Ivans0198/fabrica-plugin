@@ -230,19 +230,131 @@ Dentro de Claude, en el repo:
 /fabrica:backlog
 ```
 
+Trabaja **una issue por vez, en esta misma sesión**, contigo mirando.
 Primero comprueba que el proyecto esté en la versión del plugin
-(`fabrica-setup check`) y que el plugin esté instalado y activo. Cada obrero
+(`fabrica-setup check`) y que el plugin esté instalado y activo. Cada issue
 parte de lo último de la rama base en GitHub, así que también se niega si
 `CLAUDE.md`, `factory.json`, `.claude/settings.json` o `.factory/` tienen
-cambios sin commitear o sin subir. Si algo no cuadra, se detiene y te dice qué lo arregla. Después busca la
-siguiente tarea disponible y lanza un Claude que la
-trabaja solo (con permisos `auto` puede pedirte confirmación alguna vez; para
-cero interrupciones, córrelo en el dev container, más abajo): marca la tarea "en progreso", escribe los tests PRIMERO,
-implementa hasta que pasen, se hace revisar por el agente revisor hasta
-recibir APPROVED, y abre un **Pull Request en borrador**. Tú no haces nada.
+cambios sin commitear o sin subir. Si algo no cuadra, se detiene y te dice
+qué lo arregla.
 
-**El dev container: workers sin preguntas.** Con
-`PERMISSION_MODE=bypassPermissions`, los workers no piden confirmación para
+Después toma la siguiente tarea disponible (o la que nombres:
+`/fabrica:backlog 5`), la marca "en progreso", le arma su carpeta aparte
+(`.claude/worktrees/impl-N`), escribe los tests PRIMERO, implementa hasta
+que pasen, se hace revisar por el agente revisor hasta recibir APPROVED, y
+abre un **Pull Request en borrador**. Te puede pedir permiso para algún
+comando; tú solo aceptas. Al terminar te sugiere `/clear` y volver a llamarlo
+para la siguiente, así cada issue empieza con el contexto limpio.
+
+Para que la cola avance sin ti mirando (workers, dev container, la nube),
+mira la Parte 3.5.
+
+### Paso 4. Tu único trabajo: revisar y mergear 👑
+
+Cuando llegue el PR: ábrelo en GitHub, mira los cambios ("Files changed"),
+y si te gusta: botón **"Ready for review"** → botón **"Merge pull request"**.
+(Los tickets con `auto-merge` se saltan este paso solos: cuando el worker
+termina, `fabrica-backlog` o la nube esperan los checks del PR y lo mergean
+si pasan y si la rama tiene lo último de `main`. Si no, lo comentan en la
+issue y lo mergeas tú. Cuenta la etiqueta que tenía la issue antes de
+empezar, así que el worker no puede ponérsela él.)
+
+Al mergear pasa la magia en cadena: la tarea se cierra sola → el tablero la
+pasa a Done → la barra del épico avanza → y la siguiente tarea queda
+desbloqueada.
+
+### Paso 4.5: Publicar 🌐
+
+Cuando la primera épica esté mergeada y quieras verla en internet, dentro de
+Claude:
+
+```
+/fabrica:publish
+```
+
+Comprueba que el build sale, te da los pasos para conectar el repo al
+hosting (Vercel por defecto, gratis en el plan Hobby) y espera a que los
+hagas: la cuenta, darle a la app de Vercel acceso solo a este repo, y cargar
+los secretos en su panel son cosas tuyas. Con la URL que le pegues, prueba
+producción, la guarda en `factory.json` → `prodUrl` y abre un PR con ella.
+Se hace una vez: después, cada push a `main` publica solo y cada PR trae su
+vista previa.
+
+### Paso 5: Repetir
+
+¿Quedan tareas? Vuelve a correr `/fabrica:backlog` (Paso 3). ¿Se acabaron? Tu
+funcionalidad está lista. ¿Quieres otra funcionalidad? Vuelve al Paso 1.
+
+```
+PLANEAR → APROBAR → SOLTAR LA FÁBRICA → MERGEAR → REPETIR
+```
+
+---
+
+## Parte 3.5: Las formas de usar la fábrica 🔀
+
+Las issues son las mismas en todas y el ciclo también: tests primero, Stop
+gate, revisores y PR en borrador. Cambia dónde corre, quién mira y qué
+necesitas tener listo.
+
+| Forma           | Conviene para                                         | Necesitas                          |
+| --------------- | ----------------------------------------------------- | ---------------------------------- |
+| En tu sesión    | Empezar, issues delicadas, ver lo que hace            | Lo de la Parte 2                   |
+| Workers locales | Vaciar la cola mientras haces otra cosa               | Tu computador prendido             |
+| Dev container   | Workers sin preguntas de permisos, aislados del resto | Docker                             |
+| La nube         | Computador apagado, de noche, desde el celular        | Tu llave en los secretos (Parte 2) |
+| Menciones       | Una pregunta o un cambio puntual en una issue o un PR | Lo mismo que la nube               |
+
+### En tu sesión
+
+- **Cómo:** dentro de `claude`, en el repo, `/fabrica:backlog` o
+  `/fabrica:backlog N`.
+- **Qué pasa:** lo del Paso 3, una issue por llamada.
+- **El modelo:** el de tu sesión, no el de `factory.json` → `models.worker`.
+  Para usar ese, abre la sesión con
+  `claude --model <modelo> "/fabrica:backlog"`.
+- **Qué haces tú:** aceptas los permisos que te pida y miras. Al final,
+  `/clear` y otra vez.
+- **Si prefieres verla en otra terminal:** pídelo, y después de reservar la
+  issue te da `cd <carpeta de la issue> && claude "/fabrica:backlog N"`.
+
+### Workers locales
+
+- **Cómo:** dentro de `claude`, `/fabrica:backlog con workers`; o en la
+  terminal, `fabrica-backlog`. Con variables limitas lo que toma:
+  `MAX_ISSUES=3` (10 por defecto), `ONLY_LABEL=area:billing` (un carril),
+  `ONLY_MINE=1` (solo lo asignado a ti). Por ejemplo,
+  `MAX_ISSUES=3 fabrica-backlog`.
+- **Qué pasa:** lanza un `claude -p` por issue, de a uno, cada uno en su
+  carpeta, hasta vaciar la cola o llegar al máximo. Al terminar, resume por
+  issue: PR, `needs-human` con su motivo, o devuelta a la cola.
+- **El modelo:** `factory.json` → `models.worker`.
+- **Qué haces tú:** nada hasta que lleguen los PRs. El computador tiene que
+  seguir prendido.
+
+**Sin Docker.** Docker es opcional: solo lo usa el dev container. Sin él,
+todo lo demás funciona igual en tu computador: tu sesión, los workers de
+`fabrica-backlog` y la nube. La diferencia es el modo de permisos: fuera del
+contenedor los workers corren con `PERMISSION_MODE=auto` (el que viene por
+defecto), que deja pasar lo normal y a veces niega un comando, por ejemplo
+uno que sale a internet. Si eso pasa, el worker lo dice y la issue puede
+quedar en `needs-human`; la retomas como dice la Parte 5, o la trabajas en
+tu sesión con `/fabrica:backlog N`.
+
+Si un worker se detiene pidiendo aprobación para cada comando, tu cuenta
+tiene una política que no deja trabajar solos a los workers. Usa tu sesión,
+o la nube.
+
+### Dev container
+
+- **Cómo:** ábrelo (abajo cómo) y, dentro, corre `fabrica-backlog`. También
+  puedes abrir `claude` dentro y usar `/fabrica:backlog` como en tu sesión.
+- **Qué pasa:** lo mismo que los workers locales, pero sin ninguna pregunta
+  de permisos y con la salida a internet cerrada.
+- **El modelo:** `factory.json` → `models.worker`.
+- **Qué haces tú:** levantarlo e iniciar sesión dentro la primera vez.
+
+Con `PERMISSION_MODE=bypassPermissions`, los workers no piden confirmación para
 nada. Eso solo es seguro en un contenedor desechable, así que
 `fabrica-backlog` se niega a correr en ese modo fuera de uno.
 `fabrica-devcontainer` escribe uno en `.devcontainer/` (el bootstrap te lo
@@ -297,45 +409,66 @@ reconstruye. Lo que el firewall no cubre:
   escriba en `.git/hooks/` o `.vscode/` corre después fuera del contenedor.
   Si algo te parece raro, revísalos antes de usar git o VS Code en el host.
 
-### Paso 4. Tu único trabajo: revisar y mergear 👑
+### La nube
 
-Cuando llegue el PR: ábrelo en GitHub, mira los cambios ("Files changed"),
-y si te gusta: botón **"Ready for review"** → botón **"Merge pull request"**.
-(Los tickets con `auto-merge` se saltan este paso solos: cuando el worker
-termina, `fabrica-backlog` o la nube esperan los checks del PR y lo mergean
-si pasan y si la rama tiene lo último de `main`. Si no, lo comentan en la
-issue y lo mergeas tú. Cuenta la etiqueta que tenía la issue antes de
-empezar, así que el worker no puede ponérsela él.)
+- **Cómo:** ponle la etiqueta `ready-for-dev` a una issue, desde la web o la
+  app de GitHub.
+- **Qué pasa:** GitHub arranca una máquina, trabaja esa issue y abre su PR.
+  Una issue por corrida; varias etiquetas, varias corridas.
+- **El modelo:** `factory.json` → `models.worker`.
+- **Qué haces tú:** nada hasta el PR. Lo sigues en la pestaña **Actions**.
+  El detalle está en la Parte 4.
 
-Al mergear pasa la magia en cadena: la tarea se cierra sola → el tablero la
-pasa a Done → la barra del épico avanza → y la siguiente tarea queda
-desbloqueada.
+### Menciones
 
-### Paso 4.5: Publicar 🌐
+- **Cómo:** un comentario `@claude ...` en una issue o un PR. Por ejemplo,
+  en el PR que dejó un worker: `@claude en 390 px el botón queda cortado,
+arréglalo`.
+- **Qué pasa:** responde en el mismo hilo y, si le pediste un cambio, lo
+  commitea en la rama del PR.
+- **Qué no:** planear. La spec, el plan, las tareas y las issues se hacen en
+  tu sesión.
 
-Cuando la primera épica esté mergeada y quieras verla en internet, dentro de
-Claude:
+### Combinarlas
 
-```
-/fabrica:publish
-```
+Sí, se pueden usar a la vez en el mismo repo, y entre varias personas. Lo
+que evita que choquen:
 
-Comprueba que el build sale, te da los pasos para conectar el repo al
-hosting (Vercel por defecto, gratis en el plan Hobby) y espera a que los
-hagas: la cuenta, darle a la app de Vercel acceso solo a este repo, y cargar
-los secretos en su panel son cosas tuyas. Con la URL que le pegues, prueba
-producción, la guarda en `factory.json` → `prodUrl` y abre un PR con ella.
-Se hace una vez: después, cada push a `main` publica solo y cada PR trae su
-vista previa.
+- **El reclamo.** Antes de trabajar una issue, cada forma se la asigna y le
+  pone `in-progress`. Si otra llegó primero, la salta. Dos formas nunca
+  trabajan la misma issue.
+- **El carril de la nube.** Una issue con `ready-for-dev` es de la nube: tu
+  sesión y los workers se la saltan. Para traerla de vuelta, quítale la
+  etiqueta.
+- **Asignar es reservar.** Una issue asignada a otra persona no la toma
+  nadie más (Parte 8).
+- **Las historias en paralelo no tocan el mismo archivo.** `/fabrica:tasks`
+  lo revisa al planear, así que sus PRs no chocan.
 
-### Paso 5: Repetir
+Combinaciones que sirven:
 
-¿Quedan tareas? Vuelve a correr `/fabrica:backlog` (Paso 3). ¿Se acabaron? Tu
-funcionalidad está lista. ¿Quieres otra funcionalidad? Vuelve al Paso 1.
+- **De día en tu sesión, de noche la nube.** Trabajas las delicadas con
+  `/fabrica:backlog N` y, antes de irte, les pones `ready-for-dev` a las
+  demás.
+- **Workers y tu sesión a la vez.** Los workers vacían la cola en una
+  terminal (o en el dev container) y tú trabajas en tu sesión la issue que
+  te interesa, con `/fabrica:backlog N`.
+- **Cualquier forma y después una mención.** Lo que falte en un PR se lo
+  pides con `@claude ...` en el mismo PR.
+- **Por carriles.** Cada persona su área:
+  `/fabrica:backlog solo el carril area:billing` (Parte 8).
 
-```
-PLANEAR → APROBAR → SOLTAR LA FÁBRICA → MERGEAR → REPETIR
-```
+Pasar una issue de una forma a otra:
+
+- **A medio camino en tu sesión o en un worker:**
+  `fabrica-release N --pending` la devuelve a la cola, libre.
+- **De tu computador a la nube:** ponle `ready-for-dev`. **De la nube a tu
+  computador:** quítasela.
+- **Desde `needs-human`:** como dice la Parte 5.
+
+Lo que no se combina: planear (`spec`, `plan`, `tasks`, `issues`) y
+publicar (`publish`) se hacen solo en tu sesión. Un worker o una mención se
+niegan.
 
 ---
 

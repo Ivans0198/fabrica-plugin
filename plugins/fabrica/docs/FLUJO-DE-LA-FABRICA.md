@@ -118,6 +118,11 @@ Stop gate y los mismos revisores; cambia dónde corre y quién mira.
 | La nube         | Etiqueta `ready-for-dev` en una issue                | GitHub Actions, una issue por corrida   | Nadie; tu computador puede estar apagado | `models.worker`              | De noche, o desde el celular                                 |
 | Menciones       | Comentario `@claude ...` en una issue o PR           | GitHub Actions                          | Tú, en el hilo                           | El de la acción              | Preguntas y cambios puntuales; nunca para planear            |
 
+Docker es opcional: solo lo necesita el dev container. Sin él, los workers
+locales corren en tu computador con permisos `auto`, que a veces niegan un
+comando. Cómo se usa cada forma y cómo se combinan está en la
+[guía](GUIA-DE-LA-FABRICA.md), Parte 3.5.
+
 Algunas reglas que valen para todas:
 
 - **Asignar es reservar.** Una issue asignada a otra persona no la toma
