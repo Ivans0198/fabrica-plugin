@@ -282,6 +282,23 @@ Al mergear pasa la magia en cadena: la tarea se cierra sola → el tablero la
 pasa a Done → la barra del épico avanza → y la siguiente tarea queda
 desbloqueada.
 
+### Paso 4.5: Publicar 🌐
+
+Cuando la primera épica esté mergeada y quieras verla en internet, dentro de
+Claude:
+
+```
+/fabrica:publish
+```
+
+Comprueba que el build sale, te da los pasos para conectar el repo al
+hosting (Vercel por defecto, gratis en el plan Hobby) y espera a que los
+hagas: la cuenta, darle a la app de Vercel acceso solo a este repo, y cargar
+los secretos en su panel son cosas tuyas. Con la URL que le pegues, prueba
+producción, la guarda en `factory.json` → `prodUrl` y abre un PR con ella.
+Se hace una vez: después, cada push a `main` publica solo y cada PR trae su
+vista previa.
+
 ### Paso 5: Repetir
 
 ¿Quedan tareas? Vuelve a correr `/fabrica:backlog` (Paso 3). ¿Se acabaron? Tu
@@ -475,6 +492,7 @@ puedes leer y editar.
 | **/fabrica:issues**       | Después del merge del PR de la spec, crea las issues encadenadas (Setup, una por historia, Polish), siempre mostrándote la tabla antes de crear nada.                                                                                                                                                           |
 | **/fabrica:write-ticket** | El redactor de tareas sueltas, incidentes y bugs: tickets tan completos que un agente puede implementarlos sin preguntar nada (criterios de aceptación, tests esperados, qué queda fuera, etiquetas). También es la plantilla de las issues de `/fabrica:issues`.                                               |
 | **/fabrica:backlog**      | Suelta la fábrica sobre la cola: comprueba la versión y lanza un worker por issue elegible. Solo corre cuando se lo pides.                                                                                                                                                                                      |
+| **/fabrica:publish**      | Publica el proyecto (Vercel por defecto): comprueba el build, te guía en lo que solo tú puedes hacer, prueba producción y guarda la URL. Una vez por proyecto.                                                                                                                                                  |
 
 ### Agregar tus propias skills 🧩
 

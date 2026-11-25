@@ -17,7 +17,7 @@ flowchart TD
     idea["Tu idea<br/>Una frase, un brief o un diseño"]
     aprobar["Apruebas la spec<br/>Mergeas su PR y confirmas las issues"]
     revisar["Revisas y mergeas<br/>Aceptas capturas y apruebas las corridas"]
-    publicar["Publicas en Vercel<br/>Hoy a mano; cada push a main publica"]
+    publicar["Publicas<br/>/fabrica:publish, una vez; después cada push publica"]
   end
   subgraph fabrica["La fábrica"]
     plan["Bootstrap y planeación<br/>Arma el proyecto; spec, plan y tareas"]
@@ -25,7 +25,7 @@ flowchart TD
   end
   idea --> plan --> aprobar --> issue --> revisar
   revisar -- "siguiente issue" --> issue
-  revisar -- "cola vacía" --> publicar
+  revisar -- "épica lista" --> publicar
 ```
 
 Tu trabajo se concentra en aprobar la spec y en revisar cada PR; entre
@@ -146,27 +146,27 @@ No lo hagas sin mirar: la regresión visual existe para que un píxel cambiado
 no pase sin que lo veas. Las pruebas de fidelidad (comparar contra el diseño
 original) son otra cosa: corren solas y no piden nada.
 
-## Publicar en Vercel
+## Publicar
 
-La fábrica todavía no publica sola: estos son los pasos que funcionaron con
-un sitio de Vite, gratis en el plan Hobby.
+Cuando la primera épica esté mergeada, `/fabrica:publish` publica el
+proyecto. Se hace una vez; después, cada push a `main` publica solo y cada PR
+trae su vista previa.
 
-1. Comprueba que el build sale en local: `npm run build` deja el sitio en
-   `dist/`.
-2. Crea tu cuenta en vercel.com y elige **Import Git Repository** con
-   GitHub.
-3. Instala la app de Vercel en GitHub dando acceso **solo** al repo del
-   proyecto.
-4. Importa el repo y deja lo que Vercel detecta: framework **Vite**, build
-   `npm run build`, salida `dist`, sin variables de entorno.
-5. Dale **Deploy**. Cada push a `main` publica solo, y cada PR trae su vista
-   previa.
-6. Verifica producción con las pruebas del proyecto, apuntadas a la URL
-   pública:
-   `APP_URL=https://<tu-sitio>.vercel.app npx playwright test tests/fidelity tests/behavior`.
+1. Comprueba que el build sale (`fabrica-cmd build`) y qué variables de
+   entorno necesita.
+2. Te da los pasos del hosting (Vercel por defecto, gratis en el plan Hobby)
+   y espera a que los hagas: crear la cuenta, instalar la app de Vercel en
+   GitHub **solo para este repo**, importar el repo con lo que Vercel detecta
+   y cargar los secretos en su panel. Eso es tuyo: la fábrica no crea
+   cuentas ni ve secretos.
+3. Con la URL que le pegues, prueba producción: que responda, y las pruebas
+   del proyecto que leen `APP_URL`.
+4. Guarda la URL en `factory.json` → `prodUrl` y en el README, en un PR que
+   mergeas tú.
 
 Una prueba que nombra `/src/main.ts` falla contra producción, porque ahí el
-script compilado se llama `/assets/index-*.js`. Es normal.
+script compilado se llama `/assets/index-*.js`. Es normal, y la skill lo
+dice así.
 
 ## Modelos y consumo
 
@@ -215,8 +215,8 @@ bloquea un hook. Cualquier merge se deshace con el botón Revert del PR.
 Límites conocidos de la 0.5.12, sacados de la prueba con REFASTIDIOSO.
 Ninguno impide terminar un proyecto; algunos te cuestan un paso a mano.
 
-- **No publica.** No hay paso de deploy en la guía ni en el bootstrap:
-  Vercel se configura a mano (ver Publicar en Vercel).
+- **No publica sola.** `/fabrica:publish` te guía, pero la cuenta del
+  hosting y sus permisos los das tú.
 - **No cierra la épica.** Cuando se cierran todas sus historias, la épica
   sigue abierta. Ciérrala tú.
 - **Deja etiquetas viejas.** Una issue cerrada conserva `in-progress` o
@@ -255,6 +255,7 @@ gh secret set FABRICA_PUSH_TOKEN            # opcional
 /fabrica:issues <número de la épica>        # después de mergear la spec
 /fabrica:backlog                            # una issue por llamada; /clear entre una y otra
 claude --model sonnet "/fabrica:backlog"    # que el código lo escriba sonnet
+/fabrica:publish                            # una vez: publica en Vercel y prueba producción
 
 # Estado de la cola
 gh issue list --label pending
