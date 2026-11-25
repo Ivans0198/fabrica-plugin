@@ -238,8 +238,10 @@ claude plugin marketplace add <owner>/fabrica-plugin  # el plugin, desde GitHub
 claude plugin install fabrica@fabrica-local --scope project
 ```
 
-Las sesiones de `gh` y de Claude quedan en volúmenes: no se repite al
-reconstruir. VS Code copia tu identidad de git (`user.name` y `user.email`)
+Sin VS Code, levántalo con
+`npx -y @devcontainers/cli@0.91.0 up --workspace-folder .`: la 0.80.0 se
+quedaba colgada con Docker 29 y no corría el firewall. Las sesiones de `gh` y
+de Claude quedan en volúmenes: no se repite al reconstruir. VS Code copia tu identidad de git (`user.name` y `user.email`)
 al contenedor; si lo abres de otra forma, configúrala dentro, o los commits
 de los workers no tendrán autor. Si cambias `allowed-domains.txt`, reconstruye el contenedor.
 

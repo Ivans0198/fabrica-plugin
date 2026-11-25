@@ -93,4 +93,8 @@ jq --args '.features += (reduce $ARGS.positional[] as $f ({}; .[$f] = {}))' \
   "${features[@]+"${features[@]}"}" < "$TEMPLATES/devcontainer.json" > "$DEST/devcontainer.json"
 
 echo "✓ $DEST/ escrito: Dockerfile, init-firewall.sh, allowed-domains.txt y devcontainer.json"
-echo "  Commitéalo. Para abrirlo: 'Reopen in Container' en VS Code, o 'devcontainer up --workspace-folder .'"
+# La 0.80.0 de @devcontainers/cli se colgaba con Docker 29 después de
+# "Container started", sin correr el firewall; npx usa la que tenga en caché.
+echo "  Commitéalo. Para abrirlo: 'Reopen in Container' en VS Code, o"
+echo "  npx -y @devcontainers/cli@0.91.0 up --workspace-folder ."
+echo "  Fuera de VS Code, configura dentro git config --global user.name y user.email."
