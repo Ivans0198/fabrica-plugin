@@ -409,6 +409,74 @@ describe("fabrica-devcontainer", () => {
     TIMEOUT,
   );
 
+  // truckconnect-mobile (2026-11-26): un proyecto con pnpm no tenía pnpm en
+  // la imagen, y dentro el firewall no deja instalarlo con apt.
+  it.each([
+    ["pnpm@10.4.1", "10.4.1"],
+    [
+      "pnpm@10.4.1+sha512.c753b6c3ad7afa13af388fa6d808035a008e30ea9993f58c6663e2bc5ff21679",
+      "10.4.1",
+    ],
+  ])(
+    "con packageManager %s, pnpm va en la imagen, en esa versión",
+    async (packageManager, version) => {
+      const dir = project();
+      writeFileSync(
+        path.join(dir, "package.json"),
+        JSON.stringify({ packageManager }),
+      );
+
+      const { code } = await run(dir, []);
+
+      expect(code).toBe(0);
+      const dockerfile = readFileSync(
+        path.join(dir, ".devcontainer/Dockerfile"),
+        "utf8",
+      );
+      expect(dockerfile).toContain(`ARG PNPM_VERSION=${version}`);
+      const install = dockerfile.indexOf("npm install -g pnpm@${PNPM_VERSION}");
+      expect(install).toBeGreaterThan(-1);
+      expect(install).toBeLessThan(dockerfile.indexOf("USER node"));
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "sin pnpm en packageManager, la imagen no trae pnpm",
+    async () => {
+      const dir = project();
+      writeFileSync(
+        path.join(dir, "package.json"),
+        JSON.stringify({ packageManager: "npm@11.0.0" }),
+      );
+
+      await run(dir, []);
+
+      expect(
+        readFileSync(path.join(dir, ".devcontainer/Dockerfile"), "utf8"),
+      ).not.toContain("pnpm");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "una versión de pnpm rara falla sin escribir nada",
+    async () => {
+      const dir = project();
+      writeFileSync(
+        path.join(dir, "package.json"),
+        JSON.stringify({ packageManager: "pnpm@$(id)" }),
+      );
+
+      const { code, stderr } = await run(dir, []);
+
+      expect(code).not.toBe(0);
+      expect(stderr).toContain("packageManager");
+      expect(existsSync(path.join(dir, ".devcontainer"))).toBe(false);
+    },
+    TIMEOUT,
+  );
+
   it(
     "sin --playwright, la imagen no trae Chromium",
     async () => {

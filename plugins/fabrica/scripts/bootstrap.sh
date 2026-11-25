@@ -5,8 +5,19 @@ set -euo pipefail
 
 gh auth status >/dev/null 2>&1 || { echo "❌ gh no está autenticado. Corre 'gh auth login' primero" >&2; exit 1; }
 
-echo "▶ Installing npm dependencies..."
-npm install
+# pnpm si el package.json lo pide en packageManager; si no, npm.
+pm=$(jq -r '.packageManager // ""' package.json 2>/dev/null || true)
+if [[ "$pm" == pnpm@* ]]; then
+  command -v pnpm >/dev/null 2>&1 || {
+    echo "❌ package.json pide $pm y pnpm no está instalado. Instálalo con 'npm install -g $pm' (o 'corepack enable' en Node 24) y vuelve a correr esto" >&2
+    exit 1
+  }
+  echo "▶ Installing dependencies with pnpm..."
+  pnpm install
+else
+  echo "▶ Installing npm dependencies..."
+  npm install
+fi
 
 echo "▶ Installing Playwright chromium (cached per machine)..."
 npx playwright install chromium
