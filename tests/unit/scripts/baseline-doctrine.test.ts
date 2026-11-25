@@ -24,6 +24,7 @@ const GOVERNED_FILES = [
   "rules/fabrica.md",
   "GUIA-DE-LA-FABRICA.md",
   "MANUAL-DE-LA-FABRICA.md",
+  "FLUJO-DE-LA-FABRICA.md",
 ];
 
 /**

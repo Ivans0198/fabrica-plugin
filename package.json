@@ -1,6 +1,6 @@
 {
   "name": "fabrica-plugin",
-  "version": "0.5.15",
+  "version": "0.5.16",
   "private": true,
   "description": "Plugin de Claude Code de la fábrica y sus tests.",
   "scripts": {

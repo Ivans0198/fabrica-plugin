@@ -7,6 +7,8 @@ los planes y mergea.
 
 Para empezar, el manual corto:
 [`plugins/fabrica/docs/MANUAL-DE-LA-FABRICA.md`](plugins/fabrica/docs/MANUAL-DE-LA-FABRICA.md).
+El flujo completo, con el papel de Spec Kit y las formas de usarla:
+[`plugins/fabrica/docs/FLUJO-DE-LA-FABRICA.md`](plugins/fabrica/docs/FLUJO-DE-LA-FABRICA.md).
 La guía de uso paso a paso, con el detalle de cada pieza, está en
 [`plugins/fabrica/docs/GUIA-DE-LA-FABRICA.md`](plugins/fabrica/docs/GUIA-DE-LA-FABRICA.md).
 Este README es la referencia técnica.
