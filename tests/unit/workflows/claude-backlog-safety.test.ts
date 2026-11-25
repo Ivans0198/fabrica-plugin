@@ -247,3 +247,28 @@ describe("claude-backlog.yml antes del agente", () => {
     }
   });
 });
+
+// En refastidioso-web (PR #12, 2026-11-24) la mención tuvo que instalar
+// Chromium a mano para correr el e2e: claude-backlog.yml lo traía y
+// claude-mentions.yml no.
+describe("el navegador de los tests de UI en la nube", () => {
+  it.each(["claude-backlog.yml", "claude-mentions.yml"])(
+    "%s instala Chromium si el proyecto tiene playwright.config, antes del agente",
+    (file) => {
+      const wf = load(
+        readFileSync(path.join(REPO_ROOT, ".github/workflows", file), "utf8"),
+      ) as { jobs: Record<string, { steps: Step[] }> };
+      const all = Object.values(wf.jobs).flatMap((job) => job.steps);
+      const install = all.findIndex((s) =>
+        s.run?.includes("npx playwright install --with-deps chromium"),
+      );
+      const agentAt = all.findIndex((s) =>
+        s.uses?.startsWith("anthropics/claude-code-action"),
+      );
+
+      expect(install, file).toBeGreaterThan(-1);
+      expect(all[install]?.if).toContain("hashFiles('playwright.config.*')");
+      expect(install).toBeLessThan(agentAt);
+    },
+  );
+});

@@ -75,6 +75,10 @@ jobs:
         if: hashFiles('factory.json') != ''
         run: fabrica-cmd install
 
+      - name: Instala el navegador para los tests de UI
+        if: hashFiles('factory.json') != '' && hashFiles('playwright.config.*') != ''
+        run: npx playwright install --with-deps chromium
+
       # El mismo lector que process-backlog.sh: valida el nombre, así que un
       # valor con espacios o saltos de línea no puede agregar argumentos.
       - name: Lee el modelo del worker de factory.json
