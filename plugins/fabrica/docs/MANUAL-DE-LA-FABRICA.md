@@ -5,7 +5,8 @@ revisado y mergeado: tú decides qué se construye y apruebas el resultado, y
 ella planea, programa, prueba y revisa. Este manual cubre la versión 0.5.12 y
 lo aprendido al clonar y publicar un sitio real (el portafolio de
 REFASTIDIOSO). El detalle de cada pieza está en
-[`GUIA-DE-LA-FABRICA.md`](GUIA-DE-LA-FABRICA.md).
+[`GUIA-DE-LA-FABRICA.md`](GUIA-DE-LA-FABRICA.md), y el flujo completo con
+Spec Kit, en [`FLUJO-DE-LA-FABRICA.md`](FLUJO-DE-LA-FABRICA.md).
 
 ## Cómo funciona
 
