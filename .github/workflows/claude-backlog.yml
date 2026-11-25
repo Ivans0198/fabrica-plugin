@@ -86,6 +86,17 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
+      # pnpm, si el package.json lo pide en packageManager. Corepack viene
+      # con Node 24 y baja esa versión exacta.
+      - name: Activa pnpm si el proyecto lo usa
+        if: steps.gate.outputs.skip != 'true'
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+        run: |
+          if jq -e '(.packageManager // "") | startswith("pnpm@")' package.json >/dev/null 2>&1; then
+            corepack enable
+            echo "pnpm $(pnpm --version), el de packageManager en package.json"
+          fi
 
       - name: Dependencias del proyecto
         if: steps.gate.outputs.skip != 'true'

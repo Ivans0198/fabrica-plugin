@@ -39,7 +39,10 @@ la fábrica pone los obreros, el inspector de calidad y el capataz.
 Express, una librería, una CLI. Los comandos de cada proyecto viven en
 `factory.json`, pero hoy solo hay perfil de stack para Node y TypeScript
 (`node-ts`), y los checks en la nube solo instalan Node. Python o Go todavía
-no.
+no. Las dependencias pueden ir con **npm o pnpm**: para pnpm, dilo en el
+bootstrap y la fábrica pone `packageManager` en tu `package.json`, que es lo
+que miran la CI y el dev container. pnpm lo instalas tú
+(`npm install -g pnpm`).
 
 **Comando 1** (en Git Bash, donde guardas tus proyectos):
 

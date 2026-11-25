@@ -156,12 +156,21 @@ con dudas abiertas.
 Anuncia la fase. Primero `fabrica-setup init`: deja `CLAUDE.md`,
 `factory.json`, `.claude/settings.json` (permisos), el `.gitignore` y las
 reglas en `.factory/rules/`, sin pisar lo que ya exista. Después corre
-`bash "${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap.sh"` (npm install, Playwright
+`bash "${CLAUDE_PLUGIN_ROOT}/scripts/bootstrap.sh"` (dependencias, Playwright
 chromium y los 13 labels). En Windows sin `bash`, corre los equivalentes:
-`npm install`, `npx playwright install chromium`, y un `gh label create` por
+`npm install` (o `pnpm install`), `npx playwright install chromium`, y un `gh label create` por
 label (pending, in-progress, needs-human, ready-for-dev, auto-merge, ui-review,
 priority:high, priority:medium, priority:low, size:S, size:M, size:L, epic),
 ignorando los errores de "already exists".
+
+**npm o pnpm.** La fábrica funciona con los dos. Si la persona pide pnpm,
+o el repo ya tiene `pnpm-lock.yaml`, antes de `bootstrap.sh` pon en
+`package.json` → `packageManager` la versión exacta (`"pnpm@10.4.1"`, la de
+`pnpm --version`), y usa `pnpm` en los `commands` de `factory.json`
+(`install`: `["pnpm", "install", "--frozen-lockfile"]`). Con ese campo,
+`bootstrap.sh` instala con pnpm, la CI lo activa con corepack y
+`fabrica-devcontainer` lo mete en la imagen. Si pnpm no está instalado,
+`bootstrap.sh` se detiene y dice cómo instalarlo.
 
 Los modelos que aprobaron en la propuesta se escriben en `factory.json` →
 `models` cuando lo crees (más abajo, en la Fase 2). No hay que propagarlos a
@@ -382,7 +391,7 @@ npm:
 
 | Stack     | Opciones                                                                                                  |
 | --------- | --------------------------------------------------------------------------------------------------------- |
-| Node / TS | ninguna                                                                                                   |
+| Node / TS | ninguna (pnpm entra solo si `packageManager` lo pide)                                                     |
 | Python    | `--feature ghcr.io/devcontainers/features/python:1 --domain pypi.org --domain files.pythonhosted.org`     |
 | Go        | `--feature ghcr.io/devcontainers/features/go:1 --domain proxy.golang.org --domain sum.golang.org`         |
 | Rust      | `--feature ghcr.io/devcontainers/features/rust:1 --domain index.crates.io --domain static.crates.io`      |

@@ -11,6 +11,9 @@
 #   --playwright  Chromium y sus librerías en la imagen, en la versión de @playwright/test del proyecto
 #   --force       reemplaza un .devcontainer/ que ya existe
 #
+# Si el package.json pide pnpm en packageManager, pnpm va en la imagen, en
+# esa versión.
+#
 # Requires: jq.
 
 set -euo pipefail
@@ -53,11 +56,35 @@ pw_version=""
 if [ -n "$playwright" ]; then
   pw_version=$(jq -r '.version // empty' node_modules/@playwright/test/package.json 2>/dev/null || true)
   [[ "$pw_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
-    || die "--playwright necesita @playwright/test instalado: corre npm install antes"
+    || die "--playwright necesita @playwright/test instalado: corre npm install (o pnpm install) antes"
+fi
+
+# pnpm también va en la imagen: dentro, el firewall no deja instalarlo. La
+# versión es la de packageManager, sin el hash que agrega corepack.
+pnpm_version=""
+pm=$(jq -r '.packageManager // empty' package.json 2>/dev/null || true)
+if [[ "$pm" == pnpm@* ]]; then
+  pnpm_version=${pm#pnpm@}
+  pnpm_version=${pnpm_version%%+*}
+  [[ "$pnpm_version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
+    || die "packageManager raro en package.json: '$pm'. Usa pnpm@<mayor.menor.parche>"
 fi
 
 mkdir -p "$DEST"
 cp "$TEMPLATES/Dockerfile" "$DEST/Dockerfile"
+if [ -n "$pnpm_version" ]; then
+  block=$(cat <<EOF2
+# pnpm, el de packageManager en package.json. Si cambias esa versión, cambia
+# PNPM_VERSION y reconstruye.
+ARG PNPM_VERSION=$pnpm_version
+RUN npm install -g pnpm@\${PNPM_VERSION}
+
+EOF2
+)
+  awk -v block="$block" '/^ENV DEVCONTAINER=true$/ { print block; print "" } { print }' \
+    "$DEST/Dockerfile" > "$DEST/Dockerfile.tmp"
+  mv "$DEST/Dockerfile.tmp" "$DEST/Dockerfile"
+fi
 if [ -n "$pw_version" ]; then
   block=$(cat <<EOF2
 # Playwright: Chromium y sus librerías de sistema van en la imagen, que se

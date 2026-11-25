@@ -7,7 +7,8 @@
 # comandos de factory.json (commands.*), por medio de fabrica-cmd. Un comando
 # en null pasa diciendo que no se corrió.
 #
-# Solo instala Node. Un stack con otra toolchain todavía no tiene su paso de
+# Solo instala Node, con npm, o con pnpm si el package.json lo pide en
+# packageManager. Un stack con otra toolchain todavía no tiene su paso de
 # setup aquí: se agrega cuando un proyecto real lo pida.
 #
 # No puede impedir el merge si el repo no admite branch protection. Hace
@@ -59,6 +60,16 @@ jobs:
         with:
           node-version: 24
           package-manager-cache: false
+      # pnpm, si el package.json lo pide en packageManager. Corepack viene
+      # con Node 24 y baja esa versión exacta.
+      - name: Activa pnpm si el proyecto lo usa
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+        run: |
+          if jq -e '(.packageManager // "") | startswith("pnpm@")' package.json >/dev/null 2>&1; then
+            corepack enable
+            echo "pnpm $(pnpm --version), el de packageManager en package.json"
+          fi
       # Sin factory.json el proyecto todavía no pasó por el bootstrap: los
       # pasos de la app fallarían por no existir, no por trabajo mal hecho.
       # Es la misma condición que desarma el Stop gate. No pasa callado: un
