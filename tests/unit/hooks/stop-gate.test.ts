@@ -420,10 +420,11 @@ describe.each(READERS)("comandos de factory.json (lector: %s)", (reader) => {
     }
   }
 
-  function runGate(): Promise<RunResult> {
+  function runGate(extraEnv: NodeJS.ProcessEnv = {}): Promise<RunResult> {
     return runStopGate(workDir, {
       ...process.env,
       FACTORY_JSON_READER: reader,
+      ...extraEnv,
     });
   }
 
@@ -497,6 +498,54 @@ describe.each(READERS)("comandos de factory.json (lector: %s)", (reader) => {
         "test=",
         "e2e=1",
       ]);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // El ui-reviewer levanta su dev server en el puerto de la app. Si el gate
+  // corre el e2e mientras tanto, Playwright choca con él y el worker gasta un
+  // intento (refastidioso #6, con la regla de "lanzarlo solo" ya puesta).
+  it(
+    "espera a que el servidor de la revisión de UI se apague antes del e2e",
+    async () => {
+      const { logFile } = await prepare((rec) => ({ e2e: rec }));
+      const server = spawn("sleep", ["3"], { stdio: "ignore" });
+      await mkdir(path.join(workDir, ".factory"), { recursive: true });
+      await writeFile(
+        path.join(workDir, ".factory/ui-server.pid"),
+        String(server.pid),
+      );
+      const started = Date.now();
+
+      const { code, stderr } = await runGate({ FABRICA_GATE_PORT_WAIT: "20" });
+
+      expect(code, stderr).toBe(0);
+      expect(Date.now() - started).toBeGreaterThanOrEqual(2_000);
+      expect(await recordedCalls(logFile)).toHaveLength(1);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "bloquea sin correr el e2e si el servidor de la revisión de UI no se apaga a tiempo",
+    async () => {
+      const { logFile } = await prepare((rec) => ({ e2e: rec }));
+      const server = spawn("sleep", ["30"], { stdio: "ignore" });
+      try {
+        await mkdir(path.join(workDir, ".factory"), { recursive: true });
+        await writeFile(
+          path.join(workDir, ".factory/ui-server.pid"),
+          String(server.pid),
+        );
+
+        const { code, stderr } = await runGate({ FABRICA_GATE_PORT_WAIT: "2" });
+
+        expect(code).toBe(2);
+        expect(stderr).toMatch(/ui-reviewer/);
+        expect(await recordedCalls(logFile)).toEqual([]);
+      } finally {
+        server.kill();
+      }
     },
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
