@@ -2,7 +2,7 @@
 
 La fábrica es un plugin de Claude Code que convierte una idea en software
 revisado y mergeado: tú decides qué se construye y apruebas el resultado, y
-ella planea, programa, prueba y revisa. Este manual cubre la versión 0.5.12 y
+ella planea, programa, prueba y revisa. Este manual cubre la versión 0.5.18 y
 lo aprendido al clonar y publicar un sitio real (el portafolio de
 REFASTIDIOSO). El detalle de cada pieza está en
 [`GUIA-DE-LA-FABRICA.md`](GUIA-DE-LA-FABRICA.md), y el flujo completo con
@@ -112,7 +112,9 @@ repetir. Tus opiniones van al principio (la spec) y tu ojo crítico al final
    `/fabrica:backlog`.
 5. **Revisar y mergear.** Abre el PR, mira los cambios y las dudas que dejó
    el worker. Si está bien: Ready for review y Merge. La issue se cierra sola
-   y la siguiente se desbloquea.
+   y, unos segundos después, el workflow `labels-cleanup` le quita las
+   etiquetas de cola, desbloquea las que la esperaban y cierra la épica
+   cuando no le quedan issues abiertas.
 
 Para que avance sin nadie mirando, usa `fabrica-backlog` (un worker por
 issue, en segundo plano) o ponle `ready-for-dev` a una issue para que la
@@ -213,15 +215,11 @@ bloquea un hook. Cualquier merge se deshace con el botón Revert del PR.
 
 ## Lo que todavía no hace
 
-Límites conocidos de la 0.5.12, sacados de la prueba con REFASTIDIOSO.
+Límites conocidos de la 0.5.18, sacados de la prueba con REFASTIDIOSO.
 Ninguno impide terminar un proyecto; algunos te cuestan un paso a mano.
 
 - **No publica sola.** `/fabrica:publish` te guía, pero la cuenta del
   hosting y sus permisos los das tú.
-- **No cierra la épica.** Cuando se cierran todas sus historias, la épica
-  sigue abierta. Ciérrala tú.
-- **Deja etiquetas viejas.** Una issue cerrada conserva `in-progress` o
-  `needs-human`.
 - **El worker no lee los logs de la CI.** No puede confirmar qué falló en un
   job; revísalo tú con `gh run view <id> --log-failed`.
 - **El worker a veces afirma sin mirar.** Por ejemplo, predijo una captura
