@@ -5,7 +5,9 @@ toma un issue, escribe los tests primero, implementa hasta que pasan, se hace
 revisar por un agente revisor y abre un PR en borrador. Una persona aprueba
 los planes y mergea.
 
-La guía de uso paso a paso está en
+Para empezar, el manual corto:
+[`plugins/fabrica/docs/MANUAL-DE-LA-FABRICA.md`](plugins/fabrica/docs/MANUAL-DE-LA-FABRICA.md).
+La guía de uso paso a paso, con el detalle de cada pieza, está en
 [`plugins/fabrica/docs/GUIA-DE-LA-FABRICA.md`](plugins/fabrica/docs/GUIA-DE-LA-FABRICA.md).
 Este README es la referencia técnica.
 

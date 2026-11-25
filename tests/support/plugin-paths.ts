@@ -20,6 +20,7 @@ const MACHINERY: ReadonlyArray<readonly [string, string]> = [
   ["scripts/", "scripts/"],
   ["rules/", "rules/"],
   ["GUIA-DE-LA-FABRICA.md", "docs/GUIA-DE-LA-FABRICA.md"],
+  ["MANUAL-DE-LA-FABRICA.md", "docs/MANUAL-DE-LA-FABRICA.md"],
 ];
 
 /**
