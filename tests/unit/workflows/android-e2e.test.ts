@@ -78,6 +78,10 @@ describe("android-e2e.yml", () => {
       "fabrica-plugin/plugins/fabrica/scripts/android-e2e.sh",
     );
     expect(emulator.with?.arch).toBe("x86_64");
+    // Con el perfil por defecto (320×640) el teclado tapaba el botón de
+    // entrar y el flow de cerrar sesión falló solo en la CI (PR #21 de
+    // truckconnect-mobile, 2026-11-26): la pantalla de un teléfono real.
+    expect(emulator.with?.profile).toMatch(/^pixel_/);
     const kvm = all.findIndex((s) => (s.run ?? "").includes("kvm"));
     expect(kvm).toBeGreaterThan(-1);
     expect(kvm).toBeLessThan(all.indexOf(emulator));

@@ -158,6 +158,9 @@ jobs:
           arch: x86_64
           target: default
           ram-size: 2048M
+          # La pantalla de un teléfono: con la de 320×640 por defecto, el
+          # teclado tapaba el botón de entrar.
+          profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: bash "${{ runner.temp }}/fabrica-plugin/plugins/fabrica/scripts/android-e2e.sh" "${{ steps.android.outputs.apk }}" "${{ runner.temp }}/android-logs"
