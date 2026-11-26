@@ -20,9 +20,10 @@ const CALLER_PATH = path.join(
 
 interface Job {
   if?: string;
+  env?: Record<string, string>;
   permissions: Record<string, string>;
   concurrency?: { group: string; "cancel-in-progress"?: boolean };
-  steps: Array<{ uses?: string; run?: string }>;
+  steps: Array<{ uses?: string; run?: string; env?: Record<string, string> }>;
 }
 
 interface WorkflowFile {
@@ -81,5 +82,43 @@ describe("pr-conflicts.yml", () => {
 
     expect(checkout).toBeGreaterThanOrEqual(0);
     expect(script).toBeGreaterThan(checkout);
+  });
+
+  // Sin branch protection nada frena un push a main: la fábrica avisa
+  // (revisión del 2026-11-26; la persona decidió no pagar GitHub Pro todavía).
+  describe("direct-push", () => {
+    const direct = () => parse(WORKFLOW_PATH).jobs["direct-push"]!;
+
+    it("corre solo en un push a la rama principal", () => {
+      const condition = direct().if ?? "";
+
+      expect(condition).toContain("github.event_name == 'push'");
+      expect(condition).toContain("github.event.repository.default_branch");
+    });
+
+    it("pasa before y after por env, no dentro del script", () => {
+      const step = direct().steps.find((s) =>
+        s.run?.includes("main-push-check.sh"),
+      )!;
+
+      expect(step.env).toEqual({
+        BEFORE: "${{ github.event.before }}",
+        AFTER: "${{ github.event.after }}",
+      });
+      expect(step.run).not.toContain("${{");
+      expect(step.run).toContain('"$BEFORE" "$AFTER"');
+    });
+
+    it("puede abrir issues y le alcanzan los permisos del proyecto", () => {
+      expect(direct().permissions).toEqual({
+        contents: "read",
+        issues: "write",
+        "pull-requests": "read",
+      });
+      const caller = parse(CALLER_PATH).permissions ?? {};
+      expect(caller.issues).toBe("write");
+      expect(caller.contents).toBe("read");
+      expect(caller["pull-requests"]).toMatch(/read|write/);
+    });
   });
 });

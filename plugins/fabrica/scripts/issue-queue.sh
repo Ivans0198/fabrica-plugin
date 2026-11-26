@@ -58,6 +58,15 @@ case "${1:-}" in
     ;;
   claim)
     n=$(issue_number "${2:-}")
+    # fabrica-backlog ya la reclamó y preparó su worktree antes de lanzar al
+    # worker: volver a reclamar respondía "ya en curso", o se negaba si la
+    # base había cambiado mientras tanto.
+    if [ "${FABRICA_CLAIMED:-}" = "$n" ] && [ -d "$(worktree_dir_for "$n")" ]; then
+      echo "#$n ya la reclamó fabrica-backlog; su worktree está listo." >&2
+      pr_feedback "$n" >&2
+      echo "$ROOT/$(worktree_dir_for "$n")"
+      exit 0
+    fi
     check_setup_on_base || exit 1
     rc=0
     claim_issue "$n" || rc=$?
@@ -70,6 +79,7 @@ case "${1:-}" in
       # El runner es desechable y no tiene EnterWorktree: rama en el lugar.
       ensure_branch_in_place "$n" >&2
       rm -f .factory/state/stop-gate-count .factory/gate-gave-up
+      pr_feedback "$n" >&2
       echo "$ROOT"
     else
       fresh=""
@@ -78,6 +88,7 @@ case "${1:-}" in
       copy_env_files "$n"
       [ -z "$fresh" ] || install_worktree_deps "$n"
       reset_gate_state "$n"
+      pr_feedback "$n" >&2
       echo "$ROOT/$(worktree_dir_for "$n")"
     fi
     ;;

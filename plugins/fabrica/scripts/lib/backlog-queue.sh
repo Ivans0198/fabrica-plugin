@@ -233,6 +233,36 @@ pr_declares_closes() {  # issue number
   [ "${count:-0}" != "0" ]
 }
 
+# Lo que se pidió en el PR abierto de impl-N después de su último commit:
+# comentarios, revisiones y comentarios en el código, sin los de bots. Una
+# issue devuelta a la cola con su PR abierto no está hecha, y el worker que
+# solo veía el PR paraba diciendo que sí (truckconnect-mobile #16,
+# 2026-11-26). No imprime nada si no hay PR, si no hay nada nuevo o si gh
+# falla.
+pr_feedback() {  # issue number
+  local n="$1" pr view inline
+  pr=$(gh pr list --state open --head "impl-$n" --json number --jq '.[0].number // empty' 2>/dev/null) || return 0
+  [[ "$pr" =~ ^[0-9]+$ ]] || return 0
+  view=$(gh pr view "$pr" --json commits,comments,reviews 2>/dev/null) || return 0
+  inline=$(gh api "repos/{owner}/{repo}/pulls/$pr/comments" 2>/dev/null) || inline='[]'
+  jq -r --arg pr "$pr" --argjson inline "${inline:-[]}" '
+    def bot: test("\\[bot\\]$|^(github-actions|claude|app/.*)$");
+    ([.commits[]?.committedDate] | max // "") as $since
+    | [ (.comments[]? | {at: .createdAt, who: .author.login, where: "", text: .body}),
+        (.reviews[]? | select((.body // "") != "")
+          | {at: .submittedAt, who: .author.login, where: " (revisión)", text: .body}),
+        ($inline[]? | {at: .created_at, who: .user.login,
+          where: " en \(.path):\(.line // .original_line // "?")", text: .body}) ]
+    | map(select(.at > $since and ((.who // "") | bot | not)))
+    | sort_by(.at)
+    | if length == 0 then empty else
+        "📝 El PR #\($pr) tiene pedidos posteriores a su último commit: la issue no está hecha.",
+        "Atiéndelos en esta rama, súbelos, vuelve a pasar el revisor y responde en el PR.",
+        "",
+        (.[] | "— \(.who)\(.where):\n\(.text)\n")
+      end' <<<"$view" 2>/dev/null || true
+}
+
 # Mergea el PR abierto de impl-N cuando pasan sus checks, solo si la issue
 # tiene la etiqueta auto-merge. Lo llaman fabrica-backlog y la nube después
 # del agente, nunca el worker: hooks/worker-guard.sh le bloquea `gh pr merge`.
@@ -541,6 +571,7 @@ cleanup_worktrees() {  # [dry-run]
       echo "⚠ impl-$n: git no pudo borrar el worktree. Lo dejo." >&2
       continue
     fi
+    rm -f "$dir.log"
     if git merge-base --is-ancestor "impl-$n" "$base_ref" 2>/dev/null; then
       git branch -q -D "impl-$n" 2>/dev/null || true
       echo "impl-$n: worktree y rama borrados"

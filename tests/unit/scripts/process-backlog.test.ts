@@ -2252,3 +2252,158 @@ describe("bypassPermissions solo en un contenedor", () => {
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
 });
+
+// El worker de #6 se cortó a los 6 min por el límite de uso de la cuenta y
+// fabrica-backlog lo trató como una falla: needs-human y la tarjeta en
+// Blocked (truckconnect-mobile, 2026-11-26). Un límite no lo resuelve una
+// persona: la issue vuelve a la cola y el lote para.
+describe("límite de uso de la cuenta", () => {
+  let workDir = "";
+
+  afterEach(async () => {
+    if (workDir) {
+      await rm(workDir, REMOVE_TEMP_DIR_OPTIONS);
+      workDir = "";
+    }
+  });
+
+  const LIMIT =
+    "You've hit your 5-hour limit · resets 5:30pm (Australia/Melbourne)";
+
+  async function exitWith(output: string) {
+    workDir = await setupWorkDir();
+    await writeProjectConfig(workDir, FULL_STATUS_OPTIONS);
+    const { binDir, logFile } = await installFakeGh(workDir);
+    await mkdir(path.join(workDir, ".claude/worktrees"), { recursive: true });
+    await writeFile(
+      path.join(workDir, ".claude/worktrees/impl-42.log"),
+      output,
+    );
+    const result = await runBash(
+      'source scripts/process-backlog.sh; ME=tester; handle_worker_exit 42 1; echo "LIMIT=${USAGE_LIMIT_HIT:-}"',
+      workDir,
+      {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+        ISSUE_VIEW_JSON: OPEN_IN_PROGRESS_ISSUE,
+      },
+    );
+    return { ...result, log: await readLog(logFile) };
+  }
+
+  it(
+    "devuelve la issue a la cola, sin needs-human, y dice cuándo se reinicia",
+    async () => {
+      const { stdout, log } = await exitWith(`${LIMIT}\n`);
+
+      expect(log).toMatch(
+        /issue edit 42 --add-label pending --remove-label in-progress/,
+      );
+      expect(log).toMatch(/issue edit 42 --remove-assignee @me/);
+      expect(log).toMatch(/project item-edit --id ITEM123.*opt-todo/);
+      expect(log).not.toMatch(/needs-human/);
+      expect(log).toMatch(/issue comment 42 .*límite de uso/s);
+      expect(stdout).toContain(`LIMIT=${LIMIT}`);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "reconoce también el aviso viejo de la API",
+    async () => {
+      const { log } = await exitWith(
+        "Claude AI usage limit reached|1764140400\n",
+      );
+
+      expect(log).not.toMatch(/needs-human/);
+      expect(log).toMatch(/--add-label pending/);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "un resumen que solo cita el aviso a mitad de línea sigue siendo una falla",
+    async () => {
+      const { stdout, log } = await exitWith(
+        `The banner now shows "${LIMIT}" to the driver.\n`,
+      );
+
+      expect(log).toMatch(/--add-label needs-human/);
+      expect(stdout).toContain("LIMIT=\n");
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "run_worker guarda la salida del worker junto a su worktree y le dice que la issue ya está reclamada",
+    async () => {
+      workDir = await setupWorkDir();
+      const binDir = path.join(workDir, "stub-bin");
+      await mkdir(binDir, { recursive: true });
+      await writeFile(
+        path.join(binDir, "claude"),
+        `#!/usr/bin/env bash\necho "resumen final"\necho "reclamada=\${FABRICA_CLAIMED:-}" >&2\nexit 3\n`,
+      );
+      await chmod(path.join(binDir, "claude"), 0o755);
+
+      const { stdout } = await runBash(
+        'source scripts/process-backlog.sh; run_worker 77; wait "$WORKER_PID" || echo "salida=$?"',
+        workDir,
+        {
+          ...process.env,
+          PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+          PERMISSION_MODE: "auto",
+          WORKER_MODEL: "sonnet",
+        },
+      );
+
+      expect(stdout).toContain("salida=3");
+      const saved = await readFile(
+        path.join(workDir, ".claude/worktrees/impl-77.log"),
+        "utf8",
+      );
+      expect(saved).toContain("resumen final");
+      expect(saved).toContain("reclamada=77");
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+});
+
+// Hallazgos de truckconnect-mobile (2026-11-26) que viven en las reglas.
+describe("rules/fabrica.md después de truckconnect-mobile", () => {
+  const rules = () => readFileSync(pluginFile("rules/fabrica.md"), "utf8");
+  const section = (from: string, to: string) => {
+    const text = rules();
+    const start = text.indexOf(from);
+    expect(start, from).toBeGreaterThan(-1);
+    return text.slice(start, text.indexOf(to, start));
+  };
+
+  // #16: devuelta a la cola, el worker vio el PR y paró.
+  it("un PR abierto de la issue no la da por hecha", () => {
+    const check = section("2. **Already-done check", "3. **Claim**");
+
+    expect(check).toMatch(/open PR/);
+    expect(check).toMatch(/fabrica-claim N/);
+    expect(check).toMatch(/not done/);
+  });
+
+  // #16: la sesión cambió el código después del APPROVED y no volvió a
+  // pasar el revisor.
+  it("un cambio después del APPROVED pide otra ronda", () => {
+    const review = section("5. **Review**", "6. **Check the boxes**");
+
+    expect(review).toMatch(/APPROVED.*covers the commit it reviewed/s);
+    expect(review).toMatch(/new round/);
+  });
+
+  // #5, #8, #16: nada detrás del login se veía en web ni en el emulador.
+  it("las pruebas de una app con login entran con una sesión de prueba", () => {
+    const login = section("### Apps with sign-in", "## Workflow: TDD first");
+
+    expect(login).toMatch(/Playwright/);
+    expect(login).toMatch(/native/i);
+    expect(login).toMatch(/dev build|development build/);
+    expect(login).toMatch(/production/);
+  });
+});

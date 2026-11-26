@@ -221,11 +221,34 @@ Revisa el worktree \`impl-$n\`, arregla lo que falla o ajusta la issue, y retóm
 Revisa el worktree \`impl-$n\` antes de decidir cómo retomarlo: puede que el trabajo esté casi terminado y solo falte abrir el PR, o que se haya detenido a mitad de camino."
 }
 
+# Lo que el worker escribió, junto a su worktree: .claude/worktrees/ está
+# fuera de git y la carpeta impl-N es de la rama.
+worker_output_file() {  # issue number
+  printf '%s.log\n' "$(worktree_dir_for "$1")"
+}
+
+# La línea del aviso de límite de uso de la cuenta, o nada. Solo cuenta al
+# principio de una línea: un resumen que lo cita no es el aviso.
+usage_limit_line() {  # issue number
+  grep -m1 -E "^(You've hit your [^·]*limit|Claude AI usage limit reached)" \
+    "$(worker_output_file "$1")" 2>/dev/null || true
+}
+
 # Single decision point for what happens after the worker process ends, so a
 # crash (exit != 0) and a silent success (exit 0, no PR) share the same
 # needs-human path and never both fire for the same run.
 handle_worker_exit() {  # issue number, wait's exit status
-  local n="$1" exit_code="$2"
+  local n="$1" exit_code="$2" limit
+  # Un límite de uso no lo resuelve una persona: la issue vuelve a la cola
+  # con su rama, y main() para el lote (truckconnect-mobile #6, 2026-11-26).
+  limit=$(usage_limit_line "$n")
+  if [ -n "$limit" ]; then
+    echo "⏸ Límite de uso de la cuenta en #$n: la devuelvo a la cola"
+    release_to_queue "$n"
+    gh issue comment "$n" --body "🤖 **El worker se cortó por el límite de uso de la cuenta** (\`$limit\`). No es una falla: la issue volvió a la cola y su trabajo sigue en la rama \`impl-$n\` (último commit: \`$(git -C "$(worktree_dir_for "$n")" log --oneline -1 2>/dev/null || echo "sin commits")\`). El próximo \`fabrica-backlog\` la retoma desde ahí." || true
+    USAGE_LIMIT_HIT="$limit"
+    return 0
+  fi
   if [ "$exit_code" -ne 0 ]; then
     echo "⚠ Claude exited non-zero on issue #$n: labeling needs-human + explanatory comment"
     local last_work
@@ -259,13 +282,17 @@ maybe_automerge() {  # issue number, labels at start (one per line)
 # Launches the worker for issue $1 in the background and sets WORKER_PID.
 # Pulled out of main() so tests can drive it directly against a fake `claude`.
 run_worker() {
-  local n="$1" wt_dir fresh=""
+  local n="$1" wt_dir fresh="" out
   wt_dir=$(worktree_dir_for "$n")
   [ -d "$wt_dir" ] || fresh=1
   ensure_worker_worktree "$n"
   copy_env_files "$n"
   [ -z "$fresh" ] || install_worktree_deps "$n"
   reset_gate_state "$n"
+  # En un archivo y no en la terminal: el aviso de límite de uso sale ahí.
+  # main() lo muestra cuando el worker termina; claude -p no escribe antes.
+  out="$REPO_ROOT/$(worker_output_file "$n")"
+  : > "$out"
   # Runs from inside the worktree instead of passing `--worktree` to claude,
   # so the branch name stays the one `ensure_worker_worktree` decided. `exec`
   # keeps $WORKER_PID pointing at the actual claude process, not the subshell.
@@ -279,11 +306,14 @@ run_worker() {
     export FABRICA_WORKER=1
     # La base de la que se lee factory.json (lib/factory-config.sh).
     export FABRICA_BASE="$(base_branch)"
+    # Ya reclamada y con su worktree: fabrica-claim no la vuelve a reclamar.
+    export FABRICA_CLAIMED="$n"
     exec claude -p "$(bash "$SCRIPT_DIR/worker-prompt.sh" one "$n")" \
       --permission-mode "$PERMISSION_MODE" \
       --max-turns "$MAX_TURNS" \
       --model "$WORKER_MODEL" \
-      --disallowedTools "$WORKER_DISALLOWED_TOOLS"
+      --disallowedTools "$WORKER_DISALLOWED_TOOLS" \
+      > "$out" 2>&1
   ) &
   WORKER_PID=$!
 }
@@ -388,9 +418,14 @@ main() {
     else
       WORKER_EXIT_CODE=$?
     fi
+    cat "$(worker_output_file "$N")" 2>/dev/null || true
     handle_worker_exit "$N" "$WORKER_EXIT_CODE"
-    [ "$WORKER_EXIT_CODE" -eq 0 ] && maybe_automerge "$N" "$START_LABELS"
     TICKET_OUTCOME_RECORDED=1
+    if [ -n "${USAGE_LIMIT_HIT:-}" ]; then
+      echo "⏸ Paro el lote por el límite de uso de la cuenta: $USAGE_LIMIT_HIT. Vuelve a correr fabrica-backlog después. Processed: $((PROCESSED + 1))"
+      exit 0
+    fi
+    [ "$WORKER_EXIT_CODE" -eq 0 ] && maybe_automerge "$N" "$START_LABELS"
 
     PROCESSED=$((PROCESSED + 1))
   done

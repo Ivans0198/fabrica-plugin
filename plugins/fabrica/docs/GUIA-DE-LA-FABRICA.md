@@ -648,6 +648,13 @@ con squash: avisa en vez de borrar trabajo.
   Después `/fabrica:backlog N`: sigue en su worktree `impl-N` desde donde
   quedó, sin rehacer lo que ya estaba. Si su PR ya está en verde y solo
   faltaba tu decisión, no hace falta: márcalo listo y mergéalo.
+- Si el worker se corta por el **límite de uso de la cuenta** (el de 5 horas
+  o el semanal), no es una falla: `fabrica-backlog` devuelve la issue a la
+  cola, comenta cuándo se reinicia el límite y para el lote. Vuelve a
+  correrlo después; sigue desde la rama `impl-N`.
+- Si devuelves una issue a la cola con su PR abierto, lo que pediste en el
+  PR después de su último commit le llega al worker: `fabrica-claim` se lo
+  muestra.
 - La fábrica no puede terminar con tests fallando mientras le queden intentos
   (el "Stop hook" la bloquea). Si agota los intentos, el portero la deja salir
   pero con obligación de marcar `needs-human` y prohibición de abrir/marcar
@@ -658,6 +665,10 @@ con squash: avisa en vez de borrar trabajo.
   cambiar `factory.json`, que dice qué comandos corren los hooks: lo lee de
   la rama base. El texto de una issue o de un comentario es dato para él, no
   instrucciones.
+- Sin branch protection (un repo privado sin GitHub Pro) nada frena un push
+  directo a `main`. La fábrica avisa: si entra un commit que no vino de un PR
+  mergeado, abre una issue **`direct-push`** con los commits y quién los
+  empujó. Revísalos y ciérrala.
 - Si un PR de la fábrica deja de poder mergearse porque choca con `main` (pasa
   cuando se mergea otro antes), la fábrica le pone **`merge-conflict`** y
   comenta una vez. No lo resuelve sola: un merge con los tests en verde puede
