@@ -114,6 +114,31 @@ describe("android-e2e.yml", () => {
     expect(String(upload.with?.path)).toContain(".maestro/tests");
   });
 
+  // Compilar con el emulador arriba dejó al runner sin recursos: GitHub lo
+  // apagó en plena compilación (PR #21 de truckconnect-mobile, 2026-11-26).
+  it("compila antes de arrancar el emulador, con espacio liberado", () => {
+    const all = steps();
+    const emulator = all.findIndex((s) =>
+      Boolean(s.uses?.startsWith("reactivecircus/android-emulator-runner@")),
+    );
+    const build = all.findIndex((s) =>
+      (s.run ?? "").includes("fabrica-cmd androidBuild"),
+    );
+    const free = all.findIndex((s) =>
+      (s.run ?? "").includes("/usr/share/dotnet"),
+    );
+
+    expect(build).toBeGreaterThan(-1);
+    expect(build).toBeLessThan(emulator);
+    expect(free).toBeGreaterThan(-1);
+    expect(free).toBeLessThan(build);
+    // El script recibe el APK que dice factory.json → androidApk.
+    expect(String(all[emulator]!.with?.script)).toContain(
+      "steps.android.outputs.apk",
+    );
+    expect(all.find((s) => s.id === "android")!.run).toContain("androidApk");
+  });
+
   it("tiene un tope de tiempo", () => {
     const job = Object.values(parse(WORKFLOW).jobs)[0]!;
 

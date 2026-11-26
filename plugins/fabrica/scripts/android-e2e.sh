@@ -4,17 +4,17 @@
 # gate lo veía: jest corre en Node y `expo export` compila sin correr el
 # bundle (2026-11-26).
 #
-# Con los comandos de factory.json, por fabrica-cmd:
-#   androidBuild   compila e instala la app en el emulador
-#                  (p. ej. expo run:android --no-bundler)
+# La app ya viene compilada (commands.androidBuild, antes del emulador: las
+# dos cosas juntas dejaron al runner sin recursos). Aquí, con fabrica-cmd:
+#   instala el APK de factory.json → androidApk
 #   androidServe   el servidor de desarrollo, en primer plano (p. ej. Metro)
 #   androidE2e     los flows (p. ej. Maestro)
 #
-# Entre el segundo y el tercero espera a que el servidor responda en
+# Entre el servidor y los flows espera a que responda en
 # http://localhost:<puerto>/status. Deja en <carpeta de logs> el log del
 # servidor y el logcat del emulador.
 #
-# Usage: scripts/android-e2e.sh <carpeta de logs>
+# Usage: scripts/android-e2e.sh <apk> <carpeta de logs>
 #   FABRICA_ANDROID_PORT          puerto del servidor (8081)
 #   FABRICA_ANDROID_SERVER_WAIT   segundos de espera al servidor (180)
 #
@@ -22,7 +22,8 @@
 
 set -euo pipefail
 
-LOGS="${1:?uso: android-e2e.sh <carpeta de logs>}"
+APK="${1:?uso: android-e2e.sh <apk> <carpeta de logs>}"
+LOGS="${2:?uso: android-e2e.sh <apk> <carpeta de logs>}"
 PORT="${FABRICA_ANDROID_PORT:-8081}"
 WAIT="${FABRICA_ANDROID_SERVER_WAIT:-180}"
 POLL="${FABRICA_ANDROID_POLL:-2}"
@@ -36,9 +37,11 @@ finish() {
 }
 trap finish EXIT
 
-echo "::group::Compila e instala la app"
-fabrica-cmd androidBuild
-echo "::endgroup::"
+if [ ! -f "$APK" ]; then
+  echo "❌ No está el APK en $APK. commands.androidBuild tiene que dejarlo ahí, o factory.json → androidApk tiene que decir dónde queda." >&2
+  exit 1
+fi
+adb install -r "$APK"
 
 setsid fabrica-cmd androidServe > "$LOGS/server.log" 2>&1 < /dev/null &
 server=$!

@@ -602,13 +602,14 @@ la app de GitHub, como con auto-merge.
 
 **El e2e nativo en Android.** Si el proyecto tiene flows de Maestro
 (`.maestro/`), `fabrica-setup` le escribe el workflow `android-e2e`: en cada
-PR compila la app, la instala en un emulador de Android, levanta Metro y
-corre los flows, con `commands.androidBuild`, `androidServe` y `androidE2e`
-de `factory.json`. Ve lo que jest y Playwright en web no ven, como una app
-que se cae al arrancar en Hermes. Cada corrida gasta entre 15 y 25 minutos
-de Actions; un push nuevo cancela la anterior. Si falla, el artefacto
-`android-e2e` trae el log de Metro, el logcat y las capturas de Maestro.
-Sin esas tres claves el job no corre nada. No reemplaza al teléfono real.
+PR compila el APK (`commands.androidBuild`, que lo deja en `androidApk`),
+arranca un emulador de Android, lo instala, levanta Metro
+(`commands.androidServe`) y corre los flows (`commands.androidE2e`). Ve lo
+que jest y Playwright en web no ven, como una app que se cae al arrancar en
+Hermes. Cada corrida gasta entre 15 y 25 minutos de Actions; un push nuevo
+cancela la anterior. Si falla, el artefacto `android-e2e` trae el log de
+Metro, el logcat y las capturas de Maestro. Sin esas claves el job no corre
+nada. No reemplaza al teléfono real.
 
 **Las capturas propias pasan por ti.** Cada historia con UI cambia las
 capturas de `tests/ui.spec.ts-snapshots/`. El worker no las regenera y el

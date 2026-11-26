@@ -19,8 +19,11 @@ import { pluginFile } from "../../support/plugin-paths";
  * y nada del gate lo veía: jest corre en Node y `expo export` compila sin
  * correr el bundle. El worker iteró a ciegas dos veces (2026-11-26).
  *
- * El script compila e instala la app, levanta el servidor de desarrollo,
- * espera a que responda y corre los flows, con los comandos de factory.json.
+ * La app se compila antes, fuera del emulador: las dos cosas juntas dejaron
+ * al runner sin recursos y GitHub lo apagó en plena compilación (PR #21 de
+ * truckconnect-mobile, 2026-11-26). Dentro del emulador, el script instala
+ * el APK, levanta el servidor de desarrollo, espera a que responda y corre
+ * los flows.
  */
 
 const SCRIPT = pluginFile("scripts/android-e2e.sh");
@@ -32,7 +35,8 @@ afterEach(() => {
 });
 
 interface Fake {
-  build?: number;
+  install?: number;
+  noApk?: boolean;
   e2e?: number;
   /** El servidor se muere al arrancar. */
   serverDies?: boolean;
@@ -52,7 +56,6 @@ function run(fake: Fake = {}) {
     path.join(bin, "fabrica-cmd"),
     script(`echo "fabrica-cmd $1" >> "${log}"
 case "$1" in
-  androidBuild) exit ${fake.build ?? 0} ;;
   androidServe)
     echo "metro arrancando"
     ${fake.serverDies ? 'echo "Error: puerto ocupado"; exit 1' : 'trap "echo server-killed >> ' + log + '; exit 0" TERM; while :; do sleep 0.1; done'} ;;
@@ -68,13 +71,18 @@ echo "packager-status:running"`),
   writeFileSync(
     path.join(bin, "adb"),
     script(
-      `echo "adb $*" >> "${log}"; [ "$1" = logcat ] && echo "logcat de mentira"; exit 0`,
+      `echo "adb $*" >> "${log}"
+[ "$1" = logcat ] && echo "logcat de mentira"
+[ "$1" = install ] && exit ${fake.install ?? 0}
+exit 0`,
     ),
   );
   for (const f of ["fabrica-cmd", "curl", "adb"])
     chmodSync(path.join(bin, f), 0o755);
   const logs = path.join(dir, "logs");
-  const r = spawnSync("bash", [SCRIPT, logs], {
+  const apk = path.join(dir, "app-debug.apk");
+  if (!fake.noApk) writeFileSync(apk, "apk");
+  const r = spawnSync("bash", [SCRIPT, apk, logs], {
     cwd: dir,
     encoding: "utf8",
     env: {
@@ -95,15 +103,16 @@ echo "packager-status:running"`),
 }
 
 describe("android-e2e.sh", () => {
-  it("compila, levanta el servidor, espera a que responda y corre los flows", () => {
+  it("instala el APK, levanta el servidor, espera a que responda y corre los flows", () => {
     const r = run({ slowStatus: 2 });
 
     expect(r.code, r.err).toBe(0);
     const calls = r.calls.split("\n");
-    const at = (c: string) => calls.findIndex((l) => l === c);
-    expect(at("fabrica-cmd androidBuild")).toBeGreaterThan(-1);
+    const at = (c: string) => calls.findIndex((l) => l.startsWith(c));
+    expect(at("adb install -r ")).toBeGreaterThan(-1);
+    expect(r.calls).toMatch(/adb install -r .*app-debug\.apk/);
     expect(at("fabrica-cmd androidServe")).toBeGreaterThan(
-      at("fabrica-cmd androidBuild"),
+      at("adb install -r "),
     );
     expect(at("fabrica-cmd androidE2e")).toBeGreaterThan(
       at("fabrica-cmd androidServe"),
@@ -126,12 +135,21 @@ describe("android-e2e.sh", () => {
     expect(existsSync(path.join(r.logs, "logcat.txt"))).toBe(true);
   });
 
-  it("si la compilación falla, no levanta nada", () => {
-    const r = run({ build: 1 });
+  it("si la instalación falla, no levanta nada", () => {
+    const r = run({ install: 1 });
 
     expect(r.code).not.toBe(0);
     expect(r.calls).not.toContain("androidServe");
     expect(r.calls).not.toContain("androidE2e");
+  });
+
+  it("sin el APK, dice dónde lo buscó y no levanta nada", () => {
+    const r = run({ noApk: true });
+
+    expect(r.code).not.toBe(0);
+    expect(r.err).toMatch(/app-debug\.apk/);
+    expect(r.err).toMatch(/androidApk/);
+    expect(r.calls).not.toContain("adb install");
   });
 
   it("si el servidor se muere, lo dice con su log y no corre los flows", () => {
