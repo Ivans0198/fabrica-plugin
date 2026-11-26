@@ -315,6 +315,19 @@ describe("planeación con Spec Kit", () => {
     expect(rule).toMatch(/corredor de tests/);
   });
 
+  // Metro desde la raíz vigilaba los node_modules de cada worktree y se pasaba
+  // del límite de inotify: ENOSPC al arrancar (truckconnect-mobile, 2026-11-26).
+  it("el bootstrap excluye los worktrees también del bundler que vigila archivos", () => {
+    const verify = read("skills/bootstrap/SKILL.md")
+      .split("## Fase 3: Verificación real y commit")[1]!
+      .split("## Fase 4")[0]!
+      .replace(/\s+/g, " ");
+
+    expect(verify).toMatch(/Metro/);
+    expect(verify).toMatch(/blockList/);
+    expect(verify).toMatch(/ENOSPC/);
+  });
+
   it("el bootstrap ofrece el dev container en la propuesta y lo escribe con fabrica-devcontainer", () => {
     const body = read("skills/bootstrap/SKILL.md");
     const proposal = body

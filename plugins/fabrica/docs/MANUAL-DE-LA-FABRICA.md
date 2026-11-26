@@ -80,7 +80,7 @@ La fábrica arranca proyectos de Node y TypeScript, con cualquier framework
 5. **Si quieres workers sin preguntas**, acepta el dev container que te
    ofrece el bootstrap y ábrelo con "Reopen in Container" de VS Code, o sin
    VS Code con `npx -y @devcontainers/cli@0.91.0 up --workspace-folder .`. Dentro,
-   la primera vez: `gh auth login`, `claude` y la instalación del plugin.
+   la primera vez: `gh auth login -s project`, `claude` y la instalación del plugin.
    Necesita Docker. Sin Docker se usa todo lo demás igual; solo que los
    workers corren con permisos `auto` y a veces se niegan a un comando.
 

@@ -120,6 +120,10 @@ if [ "$1" = "pr" ] && [ "$2" = "list" ]; then
 fi
 
 if [ "$1" = "project" ] && [ "$2" = "item-list" ]; then
+  if [ -n "\${FAIL_ITEM_LIST:-}" ]; then
+    echo "error: your authentication token is missing required scopes [read:project]" >&2
+    exit 1
+  fi
   if [ -n "\${ITEM_LIST_JSON:-}" ]; then
     echo "$ITEM_LIST_JSON"
   else
@@ -447,6 +451,34 @@ describe("reconcile_board", () => {
       workDir = "";
     }
   });
+
+  // En el dev container, gh entró sin el permiso project: item-list falló y
+  // el set -e mató fabrica-backlog a los 3,5 s sin decir nada
+  // (truckconnect-mobile #9, 2026-11-26).
+  it(
+    "si no puede leer el tablero, avisa con el permiso que falta y sigue",
+    async () => {
+      workDir = await setupWorkDir();
+      await writeProjectConfig(workDir, FULL_STATUS_OPTIONS);
+      const { binDir } = await installFakeGh(workDir);
+
+      const { code, stdout, stderr } = await runBash(
+        "set -euo pipefail; source scripts/process-backlog.sh; reconcile_board; echo sigue",
+        workDir,
+        {
+          ...process.env,
+          PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+          FAIL_ITEM_LIST: "1",
+        },
+      );
+
+      expect(code, stderr).toBe(0);
+      expect(stdout).toContain("sigue");
+      expect(stderr).toMatch(/tablero/);
+      expect(stderr).toContain("gh auth refresh -h github.com -s project");
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
 
   it(
     "ignora las tarjetas en Blocked con needs-human",

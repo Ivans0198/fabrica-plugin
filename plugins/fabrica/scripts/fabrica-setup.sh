@@ -75,6 +75,10 @@ managed_files() {
   if [ -f tests/ui.spec.ts ]; then
     printf '%s\t%s\n' ".github/workflows/visual-baselines.yml" "$TEMPLATES/.github/workflows/visual-baselines.yml"
   fi
+  # El e2e nativo solo tiene sentido con flows de Maestro.
+  if [ -d .maestro ]; then
+    printf '%s\t%s\n' ".github/workflows/android-e2e.yml" "$TEMPLATES/.github/workflows/android-e2e.yml"
+  fi
 }
 
 # Copia un archivo del plugin con el repo y el tag del plugin puestos.

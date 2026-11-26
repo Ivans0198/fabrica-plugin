@@ -411,15 +411,25 @@ el registro de paquetes del stack, en `.devcontainer/allowed-domains.txt`. Un
 Code. La primera vez, dentro:
 
 ```bash
-gh auth login
+gh auth login -s project                              # project: el tablero
 claude                                                # entra a tu cuenta
 claude plugin marketplace add <owner>/fabrica-plugin  # el plugin, desde GitHub
 claude plugin install fabrica@fabrica-local --scope project
 ```
 
-El código de `gh auth login` vence a los 15 minutos. Si no alcanzas a
-autorizarlo, hazlo desde tu terminal, a tu ritmo:
-`docker exec -it <contenedor> gh auth login` (el id sale en `docker ps`).
+Sin `-s project`, `gh` no puede leer el tablero: `fabrica-backlog` avisa y
+sigue sin él. Si ya entraste, súmalo con `gh auth refresh -h github.com -s
+project`. Dentro no hay navegador ni portapapeles: `gh` te muestra un código
+de 8 caracteres, y tú abres a mano https://github.com/login/device en tu
+navegador y lo pegas. Espera el "✓ Logged in" antes de cerrar la terminal.
+El código vence a los 15 minutos. Si no alcanzas, hazlo desde tu terminal, a
+tu ritmo: `docker exec -it <contenedor> gh auth login -s project` (el id sale
+en `docker ps`).
+
+Si `factory.json` tiene `extraPlugins`, `fabrica-devcontainer` imprime cómo
+instalarlos dentro, cada uno en su commit fijado. Los del marketplace oficial
+(`anthropics/claude-plugins-official`) se agregan desde GitHub: Claude Code
+no acepta ese nombre desde una copia local.
 
 Sin VS Code, levántalo con
 `npx -y @devcontainers/cli@0.91.0 up --workspace-folder .`: la 0.80.0 se
@@ -589,6 +599,17 @@ ui-reviewer _mirando_ screenshots. Eso se controla en el mismo
 
 Si falta la clave, vale `"label"`. También puedes ponerle o quitarle la etiqueta `ui-review` a cualquier ticket desde
 la app de GitHub, como con auto-merge.
+
+**El e2e nativo en Android.** Si el proyecto tiene flows de Maestro
+(`.maestro/`), `fabrica-setup` le escribe el workflow `android-e2e`: en cada
+PR compila el APK (`commands.androidBuild`, que lo deja en `androidApk`),
+arranca un emulador de Android, lo instala, levanta Metro
+(`commands.androidServe`) y corre los flows (`commands.androidE2e`). Ve lo
+que jest y Playwright en web no ven, como una app que se cae al arrancar en
+Hermes. Cada corrida gasta entre 15 y 25 minutos de Actions; un push nuevo
+cancela la anterior. Si falla, el artefacto `android-e2e` trae el log de
+Metro, el logcat y las capturas de Maestro. Sin esas claves el job no corre
+nada. No reemplaza al teléfono real.
 
 **Las capturas propias pasan por ti.** Cada historia con UI cambia las
 capturas de `tests/ui.spec.ts-snapshots/`. El worker no las regenera y el

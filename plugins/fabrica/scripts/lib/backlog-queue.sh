@@ -117,10 +117,20 @@ check_plugin_ready() {
 # Todo genuinely re-queues it, with no manual commands needed.
 reconcile_board() {
   [ -f .plan/project.json ] || return 0
-  local owner number
+  local owner number items err
   owner=$(jq -r .owner .plan/project.json)
   number=$(jq -r .projectNumber .plan/project.json)
-  gh project item-list "$number" --owner "$owner" --format json --limit 500 2>/dev/null \
+  # Sin el tablero la cola sigue: las etiquetas mandan. Con set -e, un fallo
+  # de gh aquí mataba fabrica-backlog sin decir nada (en el dev container, gh
+  # entró sin el permiso project).
+  err=$(mktemp)
+  if ! items=$(gh project item-list "$number" --owner "$owner" --format json --limit 500 2>"$err"); then
+    echo "⚠ No pude leer el tablero del proyecto ($(head -1 "$err")). Sigo sin él: las tarjetas que movieras a Todo no se encolan en esta corrida. Si a gh le falta el permiso: gh auth refresh -h github.com -s project" >&2
+    rm -f "$err"
+    return 0
+  fi
+  rm -f "$err"
+  printf '%s\n' "$items" \
     | jq -r '.items[] | select(.status=="Todo") | select(.content.number != null) | .content.number' \
     | tr -d '\r' \
     | while read -r n; do
@@ -579,6 +589,25 @@ cleanup_worktrees() {  # [dry-run]
       echo "impl-$n: worktree borrado; la rama queda porque no está en $base_ref (¿merge con squash?)"
     fi
   done
+  prune_own_worktrees
+}
+
+# `git worktree prune` borra el registro de todo worktree cuya carpeta no ve.
+# El dev container ve el proyecto en otra ruta (/workspaces/<nombre>), así
+# que desde el host sus worktrees parecen huérfanos y al revés: podarlos
+# rompía el que el otro lado estaba usando (truckconnect-mobile #9,
+# 2026-11-26). Solo poda si todos los huérfanos son de esta raíz.
+prune_own_worktrees() {
+  local root others
+  root=$(pwd -P)
+  others=$(git worktree list --porcelain 2>/dev/null | awk -v root="$root/" '
+    /^worktree / { path = substr($0, 10) }
+    /^prunable/ { if (index(path, root) != 1) print path }')
+  if [ -n "$others" ]; then
+    echo "⚠ No podo los registros de worktrees: estos son de otra raíz (¿el dev container?) y quizás siguen en uso:" >&2
+    sed 's/^/  /' <<<"$others" >&2
+    return 0
+  fi
   git worktree prune 2>/dev/null || true
 }
 

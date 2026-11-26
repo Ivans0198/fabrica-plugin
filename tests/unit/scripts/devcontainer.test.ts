@@ -138,6 +138,55 @@ describe("fabrica-devcontainer", () => {
     TIMEOUT,
   );
 
+  // El proyecto está en otro sistema de archivos que el home, y pnpm dejaba su
+  // caché en la carpeta del proyecto: 655 MB sin seguimiento en el host, que
+  // además Metro intentaba vigilar (truckconnect-mobile, 2026-11-26).
+  it(
+    "con pnpm, manda su caché a un volumen del contenedor",
+    async () => {
+      const dir = project();
+      writeFileSync(
+        path.join(dir, "package.json"),
+        JSON.stringify({ packageManager: "pnpm@12.23.0" }),
+      );
+      await run(dir, []);
+      const json = config(dir);
+      const dockerfile = readFileSync(
+        path.join(dir, ".devcontainer/Dockerfile"),
+        "utf8",
+      );
+
+      expect(json.containerEnv.pnpm_config_store_dir).toBe(
+        "/home/node/.local/share/pnpm-store",
+      );
+      expect(json.mounts.join("\n")).toMatch(
+        /target=\/home\/node\/\.local\/share\/pnpm-store,type=volume/,
+      );
+      // Un volumen nuevo hereda el dueño de la carpeta de la imagen, y la
+      // carpeta se crea antes de pasar al usuario node.
+      const mkdir = dockerfile.search(
+        /mkdir -p \/home\/node\/\.local\/share\/pnpm-store/,
+      );
+      expect(mkdir).toBeGreaterThan(-1);
+      expect(mkdir).toBeLessThan(dockerfile.indexOf("USER node"));
+      expect(dockerfile).toMatch(/chown -R node:node \/home\/node\/\.local/);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "sin pnpm, ni volumen ni variable de pnpm",
+    async () => {
+      const dir = project();
+      await run(dir, []);
+      const json = config(dir);
+
+      expect(json.containerEnv.pnpm_config_store_dir).toBeUndefined();
+      expect(json.mounts.join("\n")).not.toMatch(/pnpm/);
+    },
+    TIMEOUT,
+  );
+
   it(
     "por defecto deja pasar GitHub, Anthropic y npm, y nada más",
     async () => {
@@ -419,18 +468,58 @@ describe("fabrica-devcontainer", () => {
 
       expect(code).toBe(0);
       expect(domains(dir)).toContain("mcp.expo.dev");
-      // En el commit fijado, no en lo último del marketplace.
+      // claude-plugins-official es un nombre reservado: Claude Code lo acepta
+      // solo desde GitHub, no desde una copia local, y `#<sha>` no sirve
+      // (truckconnect-mobile #9, 2026-11-26). Se agrega desde GitHub y se
+      // deja en el commit fijado antes de instalar: la instalación copia esa
+      // versión a la caché.
+      const sha = "b".repeat(40);
+      const dirOf = "~/.claude/plugins/marketplaces/claude-plugins-official";
+      const lines = stdout.split("\n").map((l) => l.trim());
+      const add = lines.indexOf(
+        "claude plugin marketplace add anthropics/claude-plugins-official",
+      );
+      const pin = lines.indexOf(
+        `git -C ${dirOf} fetch -q origin ${sha} && git -C ${dirOf} -c advice.detachedHead=false checkout -q ${sha}`,
+      );
+      const install = lines.indexOf(
+        "claude plugin install expo@claude-plugins-official --scope project",
+      );
+      expect(add).toBeGreaterThan(-1);
+      expect(pin).toBeGreaterThan(add);
+      expect(install).toBeGreaterThan(pin);
+      expect(stdout).not.toContain("~/.fabrica-marketplaces");
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "un marketplace de otro dueño se clona en su commit y se agrega desde la copia",
+    async () => {
+      const dir = project();
+      writeFileSync(
+        path.join(dir, "factory.json"),
+        JSON.stringify({
+          extraPlugins: [
+            {
+              id: "tool@acme-market",
+              marketplace: "https://github.com/acme/market.git",
+              ref: "c".repeat(40),
+            },
+          ],
+        }),
+      );
+
+      const { stdout } = await run(dir, []);
+
       expect(stdout).toContain(
-        "git clone https://github.com/anthropics/claude-plugins-official.git ~/.fabrica-marketplaces/1",
+        "git clone https://github.com/acme/market.git ~/.fabrica-marketplaces/1",
       );
       expect(stdout).toContain(
-        `git -C ~/.fabrica-marketplaces/1 checkout ${"b".repeat(40)}`,
+        `git -C ~/.fabrica-marketplaces/1 checkout ${"c".repeat(40)}`,
       );
       expect(stdout).toContain(
         "claude plugin marketplace add ~/.fabrica-marketplaces/1",
-      );
-      expect(stdout).toContain(
-        "claude plugin install expo@claude-plugins-official --scope project",
       );
     },
     TIMEOUT,

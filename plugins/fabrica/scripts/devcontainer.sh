@@ -87,6 +87,10 @@ if [ -n "$pnpm_version" ]; then
 # PNPM_VERSION y reconstruye.
 ARG PNPM_VERSION=$pnpm_version
 RUN npm install -g pnpm@\${PNPM_VERSION}
+# Su caché va en un volumen (devcontainer.json): el proyecto está en otro
+# sistema de archivos, y pnpm la dejaba dentro de la carpeta del proyecto.
+RUN mkdir -p /home/node/.local/share/pnpm-store \\
+  && chown -R node:node /home/node/.local
 
 EOF2
 )
@@ -125,7 +129,13 @@ if [ "${#extra[@]}" -gt 0 ]; then
   printf '%s\n' "${extra[@]}" | awk '!seen[$0]++' >> "$DEST/allowed-domains.txt"
 fi
 
-jq --args '.features += (reduce $ARGS.positional[] as $f ({}; .[$f] = {}))' \
+# shellcheck disable=SC2016
+jq --arg pnpm "$pnpm_version" --args '
+  .features += (reduce $ARGS.positional[] as $f ({}; .[$f] = {}))
+  | if $pnpm == "" then . else
+      .mounts += ["source=fabrica-pnpm-${devcontainerId},target=/home/node/.local/share/pnpm-store,type=volume"]
+      | .containerEnv.pnpm_config_store_dir = "/home/node/.local/share/pnpm-store"
+    end' \
   "${features[@]+"${features[@]}"}" < "$TEMPLATES/devcontainer.json" > "$DEST/devcontainer.json"
 
 echo "✓ $DEST/ escrito: Dockerfile, init-firewall.sh, allowed-domains.txt y devcontainer.json"
@@ -138,9 +148,23 @@ if [ -n "$extra_plugins" ]; then
   echo "  La primera vez dentro, además del plugin fabrica, instala los de extraPlugins:"
   i=0
   while read -r url ref; do
-    i=$((i + 1))
-    echo "    git clone $url ~/.fabrica-marketplaces/$i && git -C ~/.fabrica-marketplaces/$i checkout $ref"
-    echo "    claude plugin marketplace add ~/.fabrica-marketplaces/$i"
+    case "$url" in
+      https://github.com/anthropics/*)
+        # Nombre reservado: Claude Code lo acepta solo desde GitHub, y `#ref`
+        # no lleva un SHA. Se agrega y se deja en el commit antes de instalar;
+        # la instalación copia esa versión a la caché.
+        repo=${url#https://github.com/}
+        repo=${repo%.git}
+        mdir="~/.claude/plugins/marketplaces/${repo#*/}"
+        echo "    claude plugin marketplace add $repo"
+        echo "    git -C $mdir fetch -q origin $ref && git -C $mdir -c advice.detachedHead=false checkout -q $ref"
+        ;;
+      *)
+        i=$((i + 1))
+        echo "    git clone $url ~/.fabrica-marketplaces/$i && git -C ~/.fabrica-marketplaces/$i checkout $ref"
+        echo "    claude plugin marketplace add ~/.fabrica-marketplaces/$i"
+        ;;
+    esac
   done <<< "$extra_marketplaces"
   while IFS= read -r p; do echo "    claude plugin install $p --scope project"; done <<< "$extra_plugins"
 fi

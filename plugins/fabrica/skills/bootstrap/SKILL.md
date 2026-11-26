@@ -211,6 +211,18 @@ bloquea cada ticket.
 - **`commands.dev`**: el dev server, como lista, con el puerto fijo (ver
   abajo). Sin UI, en `null`.
 - **`appUrl`**: la URL de ese dev server. Sin UI, `null`.
+- **App móvil con flows de Maestro (`.maestro/`)**: tres claves más para el
+  job `android-e2e` del PR, que corre en un emulador, y la ruta del APK.
+  `androidBuild` compila el APK de desarrollo sin emulador (en Expo, un
+  script del proyecto con `expo prebuild -p android --no-install` y
+  `./gradlew assembleDebug -PreactNativeArchitectures=x86_64`), y
+  `androidApk` dice dónde queda
+  (`android/app/build/outputs/apk/debug/app-debug.apk`). `androidServe`
+  levanta el servidor de desarrollo en primer plano
+  (`["pnpm", "exec", "expo", "start", "--dev-client", "--port", "8081"]`) y
+  `androidE2e` corre los flows (`["pnpm", "e2e:android"]`). Sin ellas el job
+  no corre nada y lo dice. El Stop gate no las corre: el emulador no está en
+  la máquina del worker.
 - **`docLang`**: `es` o `en`, el idioma de issues, specs y PRs.
 - **`commitFormat`**: queda en `"conventional"`. Los commits siguen
   Conventional Commits, en inglés aunque `docLang` sea `es`, y el Stop gate y
@@ -441,6 +453,12 @@ lo mismo, y es peor: casi todos los corredores (vitest, jest, pytest) buscan
 tests en todo el árbol, así que corren también los de otras ramas, y el Stop
 gate bloquea la sesión por un test rojo que no es suyo. Comprueba que el
 número de tests no cambia con un worktree creado.
+
+Lo mismo con un bundler que vigila archivos, como **Metro** en Expo o React
+Native: arrancado desde la raíz, vigila los `node_modules` de cada worktree y
+se pasa del límite de vigilancia del sistema (`ENOSPC` al arrancar). Ponlos en
+el `resolver.blockList` de `metro.config.js`, junto con `.pnpm-store/` si
+pnpm deja su caché en el proyecto.
 
 ```bash
 git add -A

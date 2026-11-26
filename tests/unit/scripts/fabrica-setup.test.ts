@@ -417,6 +417,28 @@ describe("fabrica-setup init", () => {
     TIMEOUT,
   );
 
+  // truckconnect-mobile #16: la app se caía al arrancar en Hermes y ningún
+  // check lo veía (2026-11-26). El e2e nativo va donde hay flows de Maestro.
+  it(
+    "escribe el workflow de Android solo si el proyecto tiene flows de Maestro",
+    () => {
+      const sinFlows = gitRepo();
+      setup(sinFlows, ["init"]);
+      expect(
+        existsSync(path.join(sinFlows, ".github/workflows/android-e2e.yml")),
+      ).toBe(false);
+
+      const conFlows = gitRepo();
+      mkdirSync(path.join(conFlows, ".maestro"));
+      writeFileSync(path.join(conFlows, ".maestro/smoke.yaml"), "appId: x\n");
+      setup(conFlows, ["init"]);
+      expect(read(conFlows, ".github/workflows/android-e2e.yml")).toContain(
+        `${PLUGIN_REPO}/.github/workflows/android-e2e.yml@v${PLUGIN_VERSION}`,
+      );
+    },
+    TIMEOUT,
+  );
+
   it(
     "escribe el workflow visual solo si el proyecto tiene módulo visual",
     () => {
