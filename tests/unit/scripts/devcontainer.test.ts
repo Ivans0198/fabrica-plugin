@@ -255,6 +255,31 @@ describe("fabrica-devcontainer", () => {
     TIMEOUT,
   );
 
+  // El worker puede correr `sudo init-firewall.sh`: el script abría todas
+  // las políticas mientras se rearmaba, y en esa ventana la red quedaba
+  // abierta (revisión del 2026-11-26). Si ya está cerrado, no lo toca.
+  it(
+    "el firewall ya cerrado no se vuelve a abrir: sale antes de tocar las políticas",
+    async () => {
+      const dir = project();
+      await run(dir, []);
+      const firewall = readFileSync(
+        path.join(dir, ".devcontainer/init-firewall.sh"),
+        "utf8",
+      );
+      const guard = firewall.search(
+        /if \[ -f \/run\/fabrica-firewall-ok \][^\n]*-P OUTPUT DROP[^\n]*allowed-domains[^\n]*; then\n[^\n]*\n\s*exit 0/,
+      );
+
+      expect(guard).toBeGreaterThan(-1);
+      expect(guard).toBeLessThan(
+        firewall.indexOf("rm -f /run/fabrica-firewall-ok"),
+      );
+      expect(guard).toBeLessThan(firewall.indexOf("iptables -P INPUT ACCEPT"));
+    },
+    TIMEOUT,
+  );
+
   // Las capturas del contenedor diferían ~1% de las de la CI en el borde de
   // cada letra: Debian no trae el suavizado por subpíxel que Ubuntu (el runner
   // de la CI) activa con 10-sub-pixel-rgb.conf. Con él, 0 píxeles
@@ -383,6 +408,7 @@ describe("fabrica-devcontainer", () => {
               id: "expo@claude-plugins-official",
               marketplace:
                 "https://github.com/anthropics/claude-plugins-official.git",
+              ref: "b".repeat(40),
               domains: ["mcp.expo.dev"],
             },
           ],
@@ -393,8 +419,15 @@ describe("fabrica-devcontainer", () => {
 
       expect(code).toBe(0);
       expect(domains(dir)).toContain("mcp.expo.dev");
+      // En el commit fijado, no en lo último del marketplace.
       expect(stdout).toContain(
-        "claude plugin marketplace add https://github.com/anthropics/claude-plugins-official.git",
+        "git clone https://github.com/anthropics/claude-plugins-official.git ~/.fabrica-marketplaces/1",
+      );
+      expect(stdout).toContain(
+        `git -C ~/.fabrica-marketplaces/1 checkout ${"b".repeat(40)}`,
+      );
+      expect(stdout).toContain(
+        "claude plugin marketplace add ~/.fabrica-marketplaces/1",
       );
       expect(stdout).toContain(
         "claude plugin install expo@claude-plugins-official --scope project",

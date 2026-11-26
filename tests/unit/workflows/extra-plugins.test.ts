@@ -71,19 +71,33 @@ describe.each(["claude-backlog.yml", "claude-mentions.yml"])("%s", (file) => {
     );
   });
 
-  it("el paso deja las dos listas en GITHUB_OUTPUT", () => {
+  it("el paso deja los plugins y los marketplaces clonados en su commit", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "extra-plugins-wf-"));
     temps.push(dir);
+    // Un marketplace de mentira; la URL de GitHub apunta a él, como lo haría
+    // git en la CI.
+    const market = path.join(dir, "market");
+    const git = (...args: string[]) =>
+      spawnSync("git", args, { cwd: market, encoding: "utf8" }).stdout.trim();
+    spawnSync("git", ["init", "-q", market]);
+    git("config", "user.email", "t@example.com");
+    git("config", "user.name", "T");
+    writeFileSync(path.join(market, "v.txt"), "1\n");
+    git("add", "-A");
+    git("commit", "-qm", "v1");
+    const ref = git("rev-parse", "HEAD");
+    const work = path.join(dir, "work");
+    spawnSync("mkdir", ["-p", work]);
     const output = path.join(dir, "out");
     writeFileSync(output, "");
     writeFileSync(
-      path.join(dir, "factory.json"),
+      path.join(work, "factory.json"),
       JSON.stringify({
         extraPlugins: [
           {
             id: "expo@claude-plugins-official",
-            marketplace:
-              "https://github.com/anthropics/claude-plugins-official.git",
+            marketplace: "https://github.com/acme/market.git",
+            ref,
           },
         ],
       }),
@@ -93,9 +107,17 @@ describe.each(["claude-backlog.yml", "claude-mentions.yml"])("%s", (file) => {
       "bash",
       ["-eo", "pipefail", "-c", all[at].run ?? ""],
       {
-        cwd: dir,
+        cwd: work,
         encoding: "utf8",
-        env: { ...process.env, FABRICA: PLUGIN_ROOT, GITHUB_OUTPUT: output },
+        env: {
+          ...process.env,
+          FABRICA: PLUGIN_ROOT,
+          GITHUB_OUTPUT: output,
+          RUNNER_TEMP: dir,
+          GIT_CONFIG_COUNT: "1",
+          GIT_CONFIG_KEY_0: `url.${market}.insteadOf`,
+          GIT_CONFIG_VALUE_0: "https://github.com/acme/market.git",
+        },
       },
     );
 
@@ -106,7 +128,7 @@ describe.each(["claude-backlog.yml", "claude-mentions.yml"])("%s", (file) => {
         "expo@claude-plugins-official",
         "FABRICA_EOF",
         "marketplaces<<FABRICA_EOF",
-        "https://github.com/anthropics/claude-plugins-official.git",
+        `${dir}/extra-marketplaces/marketplace-1`,
         "FABRICA_EOF",
         "",
       ].join("\n"),

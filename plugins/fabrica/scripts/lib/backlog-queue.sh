@@ -260,6 +260,10 @@ automerge_issue() {  # issue number
   fi
   echo "⏳ Esperando los checks del PR #$pr para mergearlo..." >&2
   automerge_wait_checks "$pr" || { automerge_refuse "$n" "$pr" "$AUTOMERGE_WHY"; return 1; }
+  if ! automerge_checks_untouched "$pr"; then
+    automerge_refuse "$n" "$pr" "$AUTOMERGE_WHY"
+    return 1
+  fi
   read -r base head < <(gh pr view "$pr" --json baseRefName,headRefOid -q '.baseRefName + " " + .headRefOid')
   behind=$(gh api "repos/{owner}/{repo}/compare/$base...$head" -q .behind_by 2>/dev/null)
   if [ "${behind:-x}" != 0 ]; then
@@ -305,6 +309,34 @@ automerge_wait_checks() {  # PR number
     [ "$SECONDS" -lt "$deadline" ] || return 1
     sleep "${FABRICA_AUTOMERGE_INTERVAL:-20}"
   done
+}
+
+# El gate y la CI corren los scripts de package.json y la config de los tests
+# de la rama misma: un worker que los debilita ("test": "exit 0", un it.skip,
+# un test borrado) los deja en verde (revisión del 2026-11-26). Un PR así no
+# se mergea sin que lo mire una persona. 0 si el diff no toca nada de eso; si
+# toca, 1 y lo que encontró en AUTOMERGE_WHY.
+automerge_checks_untouched() {  # PR number
+  local diff found
+  if ! diff=$(gh pr diff "$1" 2>&1); then
+    AUTOMERGE_WHY="no pude leer su diff ($(printf '%s' "$diff" | head -n 2 | tr '\n' ' '))"
+    return 1
+  fi
+  found=$(printf '%s\n' "$diff" | awk '
+    /^diff --git / { file = $4; sub(/^b\//, "", file); next }
+    /^deleted file mode/ {
+      if (file ~ /(^|\/)(tests?|__tests__|e2e|\.maestro)\/|\.(test|spec)\.[cm]?[jt]sx?$/) print file " (test borrado)"
+      next
+    }
+    /^(\+\+\+|---) / { next }
+    /^[+-]/ {
+      if (file ~ /(^|\/)package\.json$/ && $0 ~ /"(test|lint|typecheck|build|e2e)[^"]*"[[:space:]]*:/) print file " (script de los checks)"
+      else if (file ~ /(^|\/)(jest|vitest|playwright|eslint)\.config\.[cm]?[jt]s$|(^|\/)\.eslintrc|(^|\/)tsconfig[^\/]*\.json$|(^|\/)factory\.json$/) print file " (configuración de los checks)"
+      else if ($0 ~ /^\+/ && $0 ~ /\.(skip|only)\(|(^|[^A-Za-z])x(it|describe|test)\(/) print file " (test saltado)"
+    }' | sort -u)
+  [ -z "$found" ] && return 0
+  AUTOMERGE_WHY="toca lo que decide si los checks pasan: $(printf '%s' "$found" | paste -sd, - | sed 's/,/, /g')"
+  return 1
 }
 
 automerge_refuse() {  # issue number, PR number, reason
@@ -420,6 +452,16 @@ copy_env_files() {  # issue number
   local wt_dir envf
   wt_dir=$(worktree_dir_for "$1")
   [ -d "$wt_dir" ] || return 0
+  # Con bypassPermissions nadie ve un `cat .env`, y la red de GitHub está
+  # abierta: un texto en la issue podía sacar los secretos en un comentario
+  # (revisión del 2026-11-26). Los tests usan mocks o un .env.test commiteado.
+  if [ "${PERMISSION_MODE:-}" = bypassPermissions ] && [ "${FABRICA_COPY_ENV:-}" != 1 ]; then
+    for envf in .env .env.*; do
+      [ -f "$envf" ] && ! git ls-files --error-unmatch "$envf" >/dev/null 2>&1 || continue
+      echo "  🔒 no copio $envf al worktree de #$1: con bypassPermissions los secretos no entran al worker. Si un test los necesita de verdad, FABRICA_COPY_ENV=1." >&2
+    done
+    return 0
+  fi
   for envf in .env .env.*; do
     [ -f "$envf" ] || continue
     git ls-files --error-unmatch "$envf" >/dev/null 2>&1 && continue

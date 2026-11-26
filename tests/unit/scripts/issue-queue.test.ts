@@ -110,6 +110,7 @@ case "$1 $2" in
     esac ;;
   "pr merge") [ -n "\${FAKE_FAIL_MERGE:-}" ] && { echo "no se pudo mergear" >&2; exit 1; } ;;
   "pr view") echo "main abc123"; exit 0 ;;
+  "pr diff") printf '%s\n' "\${FAKE_DIFF:-}"; exit 0 ;;
   "pr checks")
     # FAKE_CHECKS: lo que contesta cada llamada, en orden (0 pasa, 1 falla,
     # 8 pendiente, none sin checks, error sin permiso); la última se repite.
@@ -823,6 +824,59 @@ describe("comandos de la cola", () => {
       ["el PR no tiene checks", { FAKE_CHECKS: "none" }, /check/],
       ["los checks no terminan a tiempo", { FAKE_CHECKS: "8" }, /check/],
       ["la rama no tiene lo último de la base", { FAKE_BEHIND: "2" }, /main/],
+      // El gate corre los scripts de package.json y la config de los tests
+      // de la rama: un worker que los debilita pasa gate y CI en verde
+      // (revisión del 2026-11-26). El auto-merge no mergea eso sin que mire
+      // una persona.
+      [
+        "cambia un script de package.json",
+        {
+          FAKE_DIFF: [
+            "diff --git a/package.json b/package.json",
+            "--- a/package.json",
+            "+++ b/package.json",
+            '-    "test": "jest",',
+            '+    "test": "exit 0",',
+          ].join("\n"),
+        },
+        /package\.json/,
+      ],
+      [
+        "cambia la configuración de los tests",
+        {
+          FAKE_DIFF: [
+            "diff --git a/jest.config.js b/jest.config.js",
+            "--- a/jest.config.js",
+            "+++ b/jest.config.js",
+            "+  testPathIgnorePatterns: ['src'],",
+          ].join("\n"),
+        },
+        /jest\.config\.js/,
+      ],
+      [
+        "borra un test",
+        {
+          FAKE_DIFF: [
+            "diff --git a/tests/login.test.ts b/tests/login.test.ts",
+            "deleted file mode 100644",
+            "--- a/tests/login.test.ts",
+            "+++ /dev/null",
+          ].join("\n"),
+        },
+        /tests\/login\.test\.ts/,
+      ],
+      [
+        "salta un test",
+        {
+          FAKE_DIFF: [
+            "diff --git a/src/a.test.ts b/src/a.test.ts",
+            "--- a/src/a.test.ts",
+            "+++ b/src/a.test.ts",
+            '+  it.skip("guarda", () => {});',
+          ].join("\n"),
+        },
+        /src\/a\.test\.ts/,
+      ],
     ])(
       "no mergea si %s, y lo comenta en la issue",
       async (_caso, fake, why) => {
@@ -841,6 +895,33 @@ describe("comandos de la cola", () => {
         expect(log).not.toMatch(/pr merge/);
         expect(log).toMatch(/issue comment 5 /);
         expect(log.slice(log.indexOf("issue comment 5"))).toMatch(why);
+      },
+      TIMEOUT,
+    );
+
+    it(
+      "deja pasar un PR que solo cambia código y suma tests",
+      async () => {
+        const { repo, env } = await project();
+
+        const { code } = await run(["automerge", "5"], repo, {
+          ...env,
+          ...AUTOMERGE_FAST,
+          FAKE_LABELS_5: "auto-merge",
+          FAKE_HEAD_PR: "12",
+          FAKE_DIFF: [
+            "diff --git a/package.json b/package.json",
+            "--- a/package.json",
+            "+++ b/package.json",
+            '+    "zustand": "^5.0.0",',
+            "diff --git a/src/a.test.ts b/src/a.test.ts",
+            "+++ b/src/a.test.ts",
+            '+  it("guarda", () => {});',
+          ].join("\n"),
+        });
+
+        expect(code).toBe(0);
+        expect(await calls()).toMatch(/pr merge 12 --squash/);
       },
       TIMEOUT,
     );

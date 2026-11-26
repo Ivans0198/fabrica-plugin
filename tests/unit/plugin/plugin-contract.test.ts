@@ -539,8 +539,9 @@ describe("planeación con Spec Kit", () => {
       expect(guide()).toContain("A value is required");
     });
 
-    it("la guía explica extraPlugins", () => {
+    it("la guía explica extraPlugins, con el commit fijado", () => {
       expect(guide()).toMatch(/extraPlugins[\s\S]{0,600}marketplace/);
+      expect(guide()).toMatch(/"ref":[\s\S]{0,600}git ls-remote/);
     });
 
     // La etiqueta auto-merge no usa el auto-merge de GitHub: fabrica-backlog
