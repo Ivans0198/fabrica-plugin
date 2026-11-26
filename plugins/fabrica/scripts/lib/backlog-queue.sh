@@ -117,7 +117,7 @@ check_plugin_ready() {
 # Todo genuinely re-queues it, with no manual commands needed.
 reconcile_board() {
   [ -f .plan/project.json ] || return 0
-  local owner number items err
+  local owner number items err queued
   owner=$(jq -r .owner .plan/project.json)
   number=$(jq -r .projectNumber .plan/project.json)
   # Sin el tablero la cola sigue: las etiquetas mandan. Con set -e, un fallo
@@ -130,6 +130,7 @@ reconcile_board() {
     return 0
   fi
   rm -f "$err"
+  queued=$(mktemp)
   printf '%s\n' "$items" \
     | jq -r '.items[] | select(.status=="Todo") | select(.content.number != null) | .content.number' \
     | tr -d '\r' \
@@ -148,14 +149,40 @@ reconcile_board() {
           echo "↻ Board dice Todo para #$n (cerrado): reabriendo y encolando"
           gh issue reopen "$n" 2>/dev/null || true
           gh issue edit "$n" --add-label "pending" --remove-label "in-progress" --remove-label "needs-human" 2>/dev/null || true
+          echo "$n" >> "$queued"
         elif echo "$info" | jq -e '.labels[] | select(.name=="needs-human")' >/dev/null; then
           echo "↻ Board dice Todo para #$n (estaba needs-human): reintentando"
           gh issue edit "$n" --add-label "pending" --remove-label "needs-human" --remove-label "in-progress" 2>/dev/null || true
+          echo "$n" >> "$queued"
         elif ! echo "$info" | jq -e '.labels[] | select(.name=="pending" or .name=="in-progress")' >/dev/null; then
           echo "↻ Board dice Todo para #$n (sin label de cola): encolando"
           gh issue edit "$n" --add-label "pending" 2>/dev/null || true
+          echo "$n" >> "$queued"
         fi
       done
+  wait_until_queued "$queued"
+  rm -f "$queued"
+}
+
+# GitHub tarda unos segundos en mostrar en gh issue list una etiqueta recién
+# puesta. El reconcile encoló #22, la cola leída enseguida salió vacía y
+# fabrica-backlog terminó con "Backlog empty" (truckconnect-mobile #22,
+# 2026-11-27). Espera a que la cola muestre lo encolado; si no llega a
+# tiempo, avisa y sigue.
+wait_until_queued() {  # file with issue numbers
+  [ -s "$1" ] || return 0
+  local start=$SECONDS listed missing
+  while :; do
+    listed=$(gh issue list --limit 500 --label pending --state open \
+               --json number --jq '.[].number' 2>/dev/null | tr -d '\r') || listed=""
+    missing=$(grep -vxF -f <(printf '%s\n' "$listed") "$1" || true)
+    [ -z "$missing" ] && return 0
+    if [ $((SECONDS - start)) -ge "${FABRICA_QUEUE_WAIT:-60}" ]; then
+      echo "⚠ La cola todavía no muestra $(printf '#%s ' $missing)después de encolarlas desde el tablero: quedan para la próxima corrida." >&2
+      return 0
+    fi
+    sleep "${FABRICA_QUEUE_POLL:-2}"
+  done
 }
 
 # Falla cerrada: si gh no puede leer la issue o sus bloqueos, cuenta como

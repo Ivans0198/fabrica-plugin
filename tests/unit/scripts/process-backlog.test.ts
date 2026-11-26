@@ -106,6 +106,18 @@ if [ "$1" = "issue" ] && [ "$2" = "view" ]; then
   exit 0
 fi
 
+# La cola de wait_until_queued: muestra lo que se encoló con issue edit, pero
+# recién desde la lectura número ISSUE_LIST_AFTER + 1 (GitHub tarda).
+if [ "$1" = "issue" ] && [ "$2" = "edit" ] && [[ "$*" == *"--add-label pending"* ]]; then
+  echo "$3" >> "${toBashPath(logFile)}.queued"
+fi
+if [ "$1" = "issue" ] && [ "$2" = "list" ] && [[ "$*" == *"--jq .[].number"* ]]; then
+  seen=$(cat "${toBashPath(logFile)}.list" 2>/dev/null || echo 0)
+  echo $((seen + 1)) > "${toBashPath(logFile)}.list"
+  [ "$seen" -ge "\${ISSUE_LIST_AFTER:-0}" ] && cat "${toBashPath(logFile)}.queued" 2>/dev/null
+  exit 0
+fi
+
 if [ "$1" = "issue" ]; then
   exit 0
 fi
@@ -674,6 +686,73 @@ describe("reconcile_board", () => {
       expect(log).toMatch(/issue edit 31 --add-label pending/);
       expect(log).toMatch(/issue edit 33 --add-label pending/);
       expect(log).not.toMatch(/issue view 31\r/);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  // GitHub tarda unos segundos en mostrar en gh issue list una etiqueta
+  // recién puesta: el reconcile encoló #22 y la cola, leída enseguida, salió
+  // vacía. "Backlog empty" y la issue quedó sin hacer (truckconnect-mobile
+  // #22, 2026-11-27).
+  it(
+    "espera a que la cola muestre lo que encoló antes de seguir",
+    async () => {
+      workDir = await setupWorkDir();
+      await writeProjectConfig(workDir, FULL_STATUS_OPTIONS);
+      const { binDir, logFile } = await installFakeGh(workDir);
+      const env = {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+        ITEM_LIST_JSON: JSON.stringify({
+          items: [{ status: "Todo", content: { number: 31 } }],
+        }),
+        ISSUE_VIEW_JSON: JSON.stringify({ state: "OPEN", labels: [] }),
+        ISSUE_LIST_AFTER: "2",
+        FABRICA_QUEUE_POLL: "0.1",
+      };
+
+      const { code, stderr } = await runBash(
+        "set -euo pipefail; source scripts/process-backlog.sh; reconcile_board",
+        workDir,
+        env,
+      );
+
+      expect(code, stderr).toBe(0);
+      const lists = (await readLog(logFile))
+        .split("\n")
+        .filter((l) => l.startsWith("issue list"));
+      expect(lists).toHaveLength(3);
+      expect(stderr).toBe("");
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+
+  it(
+    "si la cola no lo muestra a tiempo, avisa y sigue",
+    async () => {
+      workDir = await setupWorkDir();
+      await writeProjectConfig(workDir, FULL_STATUS_OPTIONS);
+      const { binDir } = await installFakeGh(workDir);
+
+      const { code, stdout, stderr } = await runBash(
+        "set -euo pipefail; source scripts/process-backlog.sh; reconcile_board; echo sigue",
+        workDir,
+        {
+          ...process.env,
+          PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+          ITEM_LIST_JSON: JSON.stringify({
+            items: [{ status: "Todo", content: { number: 31 } }],
+          }),
+          ISSUE_VIEW_JSON: JSON.stringify({ state: "OPEN", labels: [] }),
+          ISSUE_LIST_AFTER: "999",
+          FABRICA_QUEUE_WAIT: "1",
+          FABRICA_QUEUE_POLL: "0.1",
+        },
+      );
+
+      expect(code, stderr).toBe(0);
+      expect(stdout).toContain("sigue");
+      expect(stderr).toMatch(/#31/);
     },
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
