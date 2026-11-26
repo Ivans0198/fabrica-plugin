@@ -39,14 +39,22 @@ const steps = () => Object.values(parse(WORKFLOW).jobs)[0]!.steps;
 const indexOf = (pred: (s: Step) => boolean) => steps().findIndex(pred);
 
 describe("android-e2e.yml", () => {
-  it("el proyecto lo corre en cada PR y a mano, uno por PR a la vez", () => {
+  // Las cachés de un PR solo las ven ese PR y los que salen de su rama: sin
+  // una corrida en main, cada PR compilaba 20 minutos desde cero (PR #24 de
+  // truckconnect-mobile, 2026-11-27). En main no se cancela una corrida a
+  // medias, que es la que deja la caché.
+  it("el proyecto lo corre en cada PR, en main y a mano, uno por PR a la vez", () => {
     const caller = parse(CALLER);
 
     expect(Object.keys(caller.on).sort()).toEqual([
       "pull_request",
+      "push",
       "workflow_dispatch",
     ]);
-    expect(caller.concurrency?.["cancel-in-progress"]).toBe(true);
+    expect(caller.on.push).toEqual({ branches: ["main"] });
+    expect(String(caller.concurrency?.["cancel-in-progress"])).toMatch(
+      /github\.event_name == 'pull_request'/,
+    );
     expect(caller.concurrency?.group).toContain("pull_request.number");
     expect(caller.permissions).toEqual({ contents: "read" });
   });
@@ -145,16 +153,89 @@ describe("android-e2e.yml", () => {
 
   // Un flow en rojo no guardaba la caché, y la siguiente corrida compilaba
   // 20 minutos desde cero (PR #21 de truckconnect-mobile, 2026-11-26).
-  it("guarda la caché de Gradle aunque el job falle", () => {
+  it("guarda la caché de Gradle aunque el job falle, solo en la rama principal", () => {
     const all = steps();
-    const save = all.find((s) => s.uses?.startsWith("actions/cache/save@"))!;
-    const restore = all.find((s) =>
-      s.uses?.startsWith("actions/cache/restore@"),
+    const isGradle = (s: Step) => String(s.with?.path).includes(".gradle");
+    const save = all.find(
+      (s) => s.uses?.startsWith("actions/cache/save@") && isGradle(s),
+    )!;
+    const restore = all.find(
+      (s) => s.uses?.startsWith("actions/cache/restore@") && isGradle(s),
     )!;
 
     expect(save.if).toContain("always()");
     expect(restore.id).toBeDefined();
     expect(save.with?.key).toBe(restore.with?.key);
+    // Cada PR guardaba 1,8 GB que no veía nadie más: cuatro llenaban 7,3 de
+    // los 10 GB del repo (2026-11-27).
+    expect(save.if).toContain("github.event.repository.default_branch");
+  });
+
+  // Con el dev client el APK solo lleva la parte nativa: el JavaScript lo
+  // sirve Metro. Casi todos los PRs tocan solo JavaScript y compilaban 20
+  // minutos igual (PR #24 de truckconnect-mobile, 2026-11-27).
+  describe("con commands.androidFingerprint", () => {
+    const find = (pred: (s: Step) => boolean) => steps().find(pred)!;
+    const fingerprint = () => find((s) => s.id === "fingerprint");
+    const restore = () => find((s) => s.id === "apk-cache");
+    const isApkSave = (s: Step) =>
+      Boolean(s.uses?.startsWith("actions/cache/save@")) &&
+      String(s.with?.path).includes("steps.android.outputs.apk");
+
+    it("saca la huella nativa después de las dependencias", () => {
+      expect(find((s) => s.id === "android").run).toContain(
+        "androidFingerprint",
+      );
+      expect(fingerprint().run).toContain("fabrica-cmd androidFingerprint");
+      expect(fingerprint().if).toContain(
+        "steps.android.outputs.fingerprint == 'true'",
+      );
+      // steps() vuelve a leer el YAML: se compara por id, no por objeto.
+      expect(indexOf((s) => s.id === "fingerprint")).toBeGreaterThan(
+        indexOf((s) => (s.run ?? "").includes("fabrica-cmd install")),
+      );
+    });
+
+    it("trae el APK de la caché por la huella y, si está, no compila", () => {
+      expect(restore().uses).toMatch(/^actions\/cache\/restore@[0-9a-f]{40}$/);
+      expect(restore().with?.path).toBe("${{ steps.android.outputs.apk }}");
+      expect(restore().with?.key).toContain("steps.fingerprint.outputs.hash");
+      expect(restore().if).toContain("steps.fingerprint.outputs.hash != ''");
+      const hit = "steps.apk-cache.outputs.cache-hit != 'true'";
+      const build = find((s) =>
+        (s.run ?? "").includes("fabrica-cmd androidBuild"),
+      );
+      for (const step of [
+        build,
+        find((s) => Boolean(s.uses?.startsWith("actions/setup-java@"))),
+        find(
+          (s) =>
+            Boolean(s.uses?.startsWith("actions/cache/restore@")) &&
+            String(s.with?.path).includes(".gradle"),
+        ),
+      ])
+        expect(step.if, step.name).toContain(hit);
+      expect(indexOf((s) => s.id === "apk-cache")).toBeLessThan(
+        indexOf((s) => s.id === "build"),
+      );
+    });
+
+    it("guarda el APK que compiló, aunque los flows fallen", () => {
+      const save = find(isApkSave);
+      const build = find((s) =>
+        (s.run ?? "").includes("fabrica-cmd androidBuild"),
+      );
+
+      expect(build.id).toBe("build");
+      expect(save.if).toContain("always()");
+      expect(save.if).toContain("steps.build.outcome == 'success'");
+      expect(save.with?.key).toBe(restore().with?.key);
+    });
+
+    it("la huella cambia si cambia cómo se compila", () => {
+      expect(fingerprint().run).toMatch(/androidBuild/);
+      expect(fingerprint().run).toMatch(/androidApk/);
+    });
   });
 
   it("apaga el demonio de Gradle antes del emulador", () => {

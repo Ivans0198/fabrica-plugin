@@ -143,7 +143,7 @@ echo "✓ $DEST/ escrito: Dockerfile, init-firewall.sh, allowed-domains.txt y de
 # "Container started", sin correr el firewall; npx usa la que tenga en caché.
 echo "  Commitéalo. Para abrirlo: 'Reopen in Container' en VS Code, o"
 echo "  npx -y @devcontainers/cli@0.91.0 up --workspace-folder ."
-echo "  Fuera de VS Code, configura dentro git config --global user.name y user.email."
+echo "  Fuera de VS Code, git no tiene tu identidad: fabrica-backlog la toma de gh, y a mano, fabrica-git-identity."
 if [ -n "$extra_plugins" ]; then
   echo "  La primera vez dentro, además del plugin fabrica, instala los de extraPlugins:"
   i=0

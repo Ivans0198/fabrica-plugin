@@ -221,7 +221,11 @@ bloquea cada ticket.
   levanta el servidor de desarrollo en primer plano
   (`["pnpm", "exec", "expo", "start", "--dev-client", "--port", "8081"]`) y
   `androidE2e` corre los flows (`["pnpm", "e2e:android"]`). Sin ellas el job
-  no corre nada y lo dice. El Stop gate no las corre: el emulador no está en
+  no corre nada y lo dice. Con `androidFingerprint`, que imprime la huella
+  de la parte nativa (en Expo,
+  `["pnpm", "exec", "fingerprint", "fingerprint:generate", "--platform", "android"]`),
+  el job guarda el APK en la caché y solo compila si la huella cambió: un PR
+  que solo toca JavaScript pasa de unos 27 minutos a unos 7. El Stop gate no las corre: el emulador no está en
   la máquina del worker.
 - **`docLang`**: `es` o `en`, el idioma de issues, specs y PRs.
 - **`commitFormat`**: queda en `"conventional"`. Los commits siguen
