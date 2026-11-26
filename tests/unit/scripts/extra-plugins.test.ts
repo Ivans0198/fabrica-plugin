@@ -170,6 +170,18 @@ describe("extra-plugins.sh", () => {
       expect(readFileSync(path.join(dir, "version.txt"), "utf8")).toBe("1\n");
     });
 
+    // Los marketplaces de anthropics tienen nombres reservados que Claude
+    // Code solo acepta desde GitHub: una copia local se rechaza.
+    it("un marketplace de anthropics no se clona: imprime su URL", () => {
+      const out = path.join(tempDir(), "markets");
+
+      const r = run({ extraPlugins: [EXPO] }, ["clone", out]);
+
+      expect(r.code, r.err).toBe(0);
+      expect(r.out).toBe(`${EXPO.marketplace}\n`);
+      expect(existsSync(out)).toBe(false);
+    });
+
     it("sin extraPlugins no clona nada", () => {
       const out = path.join(tempDir(), "markets");
 

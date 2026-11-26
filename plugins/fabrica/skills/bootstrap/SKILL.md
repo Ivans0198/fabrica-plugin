@@ -442,6 +442,12 @@ tests en todo el árbol, así que corren también los de otras ramas, y el Stop
 gate bloquea la sesión por un test rojo que no es suyo. Comprueba que el
 número de tests no cambia con un worktree creado.
 
+Lo mismo con un bundler que vigila archivos, como **Metro** en Expo o React
+Native: arrancado desde la raíz, vigila los `node_modules` de cada worktree y
+se pasa del límite de vigilancia del sistema (`ENOSPC` al arrancar). Ponlos en
+el `resolver.blockList` de `metro.config.js`, junto con `.pnpm-store/` si
+pnpm deja su caché en el proyecto.
+
 ```bash
 git add -A
 git commit -m "chore: bootstrap the project shell and the factory"

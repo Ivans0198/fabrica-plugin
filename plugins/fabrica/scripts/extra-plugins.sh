@@ -16,7 +16,8 @@
 #   domains       los dominios que necesitan (un MCP, por ejemplo), para el
 #                 firewall del dev container
 #   clone <dir>   clona cada marketplace en su commit dentro de <dir> e imprime
-#                 la carpeta de cada uno, para `plugin_marketplaces:`
+#                 la carpeta de cada uno, para `plugin_marketplaces:`. Los de
+#                 anthropics no se clonan: imprime su URL (ver abajo)
 #
 # El ref es un commit, no una rama: un cambio en el marketplace podía meter
 # hooks nuevos que corren con los secretos de la nube (revisión del
@@ -75,9 +76,14 @@ fi
 # clone: una carpeta por marketplace, en su commit.
 list=$(read_list marketplaces)
 [ -n "$list" ] || exit 0
-mkdir -p "$2"
 i=0
 while read -r url ref; do
+  # Los marketplaces de anthropics tienen nombres reservados que Claude Code
+  # solo acepta desde GitHub: una copia local se rechaza (truckconnect-mobile
+  # #9, 2026-11-26). Van por su URL, sin fijar: son de Anthropic, como el
+  # propio Claude Code.
+  case "$url" in https://github.com/anthropics/*) echo "$url"; continue ;; esac
+  mkdir -p "$2"
   i=$((i + 1))
   dest="$2/marketplace-$i"
   git clone --quiet "$url" "$dest"

@@ -837,6 +837,31 @@ describe("comandos de la cola", () => {
       TIMEOUT,
     );
 
+    // El dev container ve el proyecto en /workspaces/<nombre>: sus worktrees
+    // quedan registrados con esa ruta, y desde el host parecen huérfanos. El
+    // `git worktree prune` de cleanup borró el registro de impl-9 mientras
+    // seguía en uso (truckconnect-mobile, 2026-11-26).
+    it(
+      "no poda el registro de un worktree que vive en otra raíz",
+      async () => {
+        const { repo, env } = await project();
+        const elsewhere = path.join(dir, "workspaces", "impl-9");
+        await git(repo, `git worktree add -q -b impl-9 "${elsewhere}"`);
+        await rm(path.join(dir, "workspaces"), {
+          recursive: true,
+          force: true,
+        });
+
+        const { code, stderr } = await run(["cleanup"], repo, env);
+
+        expect(code, stderr).toBe(0);
+        const list = await git(repo, "git worktree list --porcelain");
+        expect(list.stdout).toContain(elsewhere);
+        expect(stderr).toMatch(/otra raíz|contenedor/);
+      },
+      TIMEOUT,
+    );
+
     // En fabrica-prueba, el PR #6 se mergeó en GitHub y origin/main local
     // seguía viejo: la rama parecía sin mergear (2026-11-16).
     it(
