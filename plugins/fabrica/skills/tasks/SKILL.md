@@ -39,13 +39,15 @@ planeación se hace en una sesión interactiva y para.
      Foundational, o que una historia dependa de la otra en "Dependencies &
      Execution Order". `fabrica-create-issues` rechaza dos issues en paralelo
      que nombran el mismo archivo en sus tareas;
-   - ninguna historia es tan grande que su issue sería de tamaño L. Si lo es,
-     pártela en la spec y vuelve a generar las tareas.
+   - ninguna historia es tan grande que su issue sería de tamaño L, ni pasa
+     de 12 tareas. Si lo es, pártela en la spec y vuelve a generar las
+     tareas. Setup y Foundational sí pueden pasar de 12: `fabrica:issues` las
+     reparte en varias issues.
 
    Si algo falla, corrígelo con la persona. No commitees un `tasks.md` que no
    lo cumpla: `fabrica-create-issues` lo va a rechazar después.
 
-4. Commit y push a la misma rama (`git commit -m "docs(tasks): <name> (#<N>)"`,
+4. Commit y push a la misma rama (`git commit -m "docs(tasks): break epic #<N> into tasks"`,
    `git push`).
 5. Saca el PR de borrador si la persona lo pide (`gh pr ready`).
 

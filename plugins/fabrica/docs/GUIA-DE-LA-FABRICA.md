@@ -363,6 +363,18 @@ necesitas tener listo.
 - **Qué haces tú:** nada hasta que lleguen los PRs. El computador tiene que
   seguir prendido.
 
+> 💡 **Los comandos `fabrica-*` en una terminal.** Dentro de Claude Code ya
+> están. En una terminal normal no: Claude Code los pone en su PATH, no en
+> el tuyo, y sale "command not found". En la carpeta del proyecto, una vez
+> por terminal (también dentro del dev container):
+>
+> ```bash
+> export PATH="$(claude plugin list --json | jq -r --arg p "$PWD" '.[] | select(.id | startswith("fabrica@")) | select(.projectPath == $p) | .installPath')/bin:$PATH"
+> ```
+>
+> Toma la versión del plugin instalada en ese proyecto. Después de un
+> `claude plugin update`, córrelo de nuevo.
+
 **Sin Docker.** Docker es opcional: solo lo usa el dev container. Sin él,
 todo lo demás funciona igual en tu computador: tu sesión, los workers de
 `fabrica-backlog` y la nube. La diferencia es el modo de permisos: fuera del
@@ -378,7 +390,8 @@ o la nube.
 
 ### Dev container
 
-- **Cómo:** ábrelo (abajo cómo) y, dentro, corre `fabrica-backlog`. También
+- **Cómo:** ábrelo (abajo cómo) y, dentro, corre `fabrica-backlog` (con el
+  PATH del recuadro de arriba). También
   puedes abrir `claude` dentro y usar `/fabrica:backlog` como en tu sesión.
 - **Qué pasa:** lo mismo que los workers locales, pero sin ninguna pregunta
   de permisos y con la salida a internet cerrada.

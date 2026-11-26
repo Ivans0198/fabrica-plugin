@@ -466,6 +466,23 @@ describe("planeación con Spec Kit", () => {
       for (const message of messages) expect(message).toMatch(CONVENTIONAL);
     });
 
+    // El nombre de la spec sale en docLang: "docs(spec): sesion y navegacion
+    // (#3)" (truckconnect-mobile). El mensaje nombra la épica por su número.
+    it("los commits de spec, plan y tasks no llevan el nombre de la spec", () => {
+      for (const skill of ["spec", "plan", "tasks"]) {
+        const messages = [
+          ...read(`skills/${skill}/SKILL.md`).matchAll(
+            /git commit -m "([^"]+)"/g,
+          ),
+        ].map((m) => m[1]);
+        expect(messages.length, skill).toBeGreaterThan(0);
+        for (const message of messages) {
+          expect(message, skill).not.toMatch(/<(name|nombre)>/);
+          expect(message, skill).toMatch(/#<N>/);
+        }
+      }
+    });
+
     it("hooks.json corre el hook de commit antes de cada Bash", () => {
       expect(read("hooks/hooks.json")).toContain("hooks/commit-format.sh");
     });
@@ -481,6 +498,27 @@ describe("planeación con Spec Kit", () => {
   describe("lo que faltó en truckconnect-mobile", () => {
     const guide = () => read("docs/GUIA-DE-LA-FABRICA.md");
     const bootstrap = () => read("skills/bootstrap/SKILL.md");
+
+    // "Apruebo la tabla así" dejó fuera los ui-review que la tabla sugería
+    // (turno 13). auto-merge sigue pidiendo que la persona lo nombre.
+    it("aprobar la tabla aplica ui-review; auto-merge solo si se nombra", () => {
+      const issues = read("skills/issues/SKILL.md");
+      expect(issues).toMatch(/aprueba la tabla[\s\S]{0,200}`ui-review`/);
+      expect(issues).toMatch(/`auto-merge`[\s\S]{0,200}nombr/);
+    });
+
+    it("los skills dicen el máximo de 12 tareas por issue", () => {
+      expect(read("skills/issues/SKILL.md")).toMatch(/12 tareas/);
+      expect(read("skills/tasks/SKILL.md")).toMatch(/12 tareas/);
+    });
+
+    // Los fabrica-* solo están en el PATH de Claude Code; la guía los mandaba
+    // a la terminal y daba "command not found" (worker de #5).
+    it("la guía dice cómo tener los fabrica-* en una terminal", () => {
+      expect(guide()).toMatch(
+        /command not found[\s\S]{0,400}claude plugin list --json/,
+      );
+    });
 
     it("la guía dice cómo crear FABRICA_PLUGIN_TOKEN", () => {
       expect(guide()).toMatch(
@@ -505,8 +543,12 @@ describe("planeación con Spec Kit", () => {
       expect(guide()).toMatch(/extraPlugins[\s\S]{0,600}marketplace/);
     });
 
-    it("el bootstrap comprueba auto-merge en vez de darlo por hecho", () => {
-      expect(bootstrap()).toContain(".allow_auto_merge");
+    // La etiqueta auto-merge no usa el auto-merge de GitHub: fabrica-backlog
+    // espera los checks y mergea (lib/backlog-queue.sh, automerge_issue). La
+    // 0.5.22 decía que en un repo privado gratis no funcionaba, y era falso.
+    it("el bootstrap no pide activar el auto-merge de GitHub", () => {
+      expect(bootstrap()).not.toContain("--enable-auto-merge");
+      expect(bootstrap()).not.toContain("allow_auto_merge");
     });
 
     // Un emulador lanzado como hijo de la sesión dejó a claude -p sin

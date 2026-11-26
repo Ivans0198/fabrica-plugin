@@ -21,6 +21,9 @@ const TASK = /^T\d{3,}$/;
 const PRIORITIES = ["high", "medium", "low"];
 const SIZES = ["S", "M"];
 const PHASES = ["setup", "story", "polish"];
+// Una issue con más tareas es un worker con demasiado contexto y un PR difícil
+// de revisar: Setup salió con 17 y con 19 en las dos pruebas (2026-11-26).
+const MAX_TASKS = 12;
 const CONTROL = /[\u0000-\u001f\u007f]/;
 const MARKERS = /fabrica-(key|spec):/;
 const MAX_BODY = 60000;
@@ -208,7 +211,6 @@ function validate(data, errors) {
     if (!spec.stories.has(story)) fail(`${story} no está en ${tasksFile}`);
   const setups = issues.filter((e) => e.phase === "setup");
   const polishes = issues.filter((e) => e.phase === "polish");
-  if (setups.length > 1) fail("hay más de una issue de Setup + Foundational");
   if (setups.length === 0 && [...spec.owner.values()].includes("setup"))
     fail(
       `${tasksFile} tiene tareas de Setup o Foundational: hace falta una issue de Setup`,
@@ -231,6 +233,14 @@ function validate(data, errors) {
       fail(`${t} (${taskOwner}) está en ${tasksFile} y en ninguna issue`);
   if (polishes.length !== 1)
     fail("tiene que haber exactamente una issue de Polish");
+  for (const e of issues) {
+    if (!Array.isArray(e.tasks) || e.tasks.length <= MAX_TASKS) continue;
+    fail(
+      e.phase === "setup"
+        ? `${e.key} lleva ${e.tasks.length} tareas (máximo ${MAX_TASKS}): parte Setup y Foundational en varias issues de phase setup, cada una con su dependsOn, y que las historias dependan de todas`
+        : `${e.key} lleva ${e.tasks.length} tareas (máximo ${MAX_TASKS}): parte la historia en la spec (/fabrica:tasks) antes de crear las issues`,
+    );
+  }
   const storyKeys = [...storyEntries.values()].map((e) => e.key);
   for (const e of issues) {
     for (const d of e.dependsOn) {
@@ -245,13 +255,13 @@ function validate(data, errors) {
         `Polish tiene que depender de todas las historias; le faltan ${missing.join(", ")}`,
       );
   }
-  if (setups.length === 1) {
+  for (const setup of setups) {
     const missing = [...storyEntries.values()]
-      .filter((e) => !e.dependsOn.includes(setups[0].key))
+      .filter((e) => !e.dependsOn.includes(setup.key))
       .map((e) => e.key);
     if (missing.length)
       fail(
-        `Las historias dependen de Setup; no lo hacen ${missing.join(", ")}`,
+        `Las historias dependen de Setup (${setup.key}); no lo hacen ${missing.join(", ")}`,
       );
   }
   if (errors.length) return null;
@@ -262,11 +272,11 @@ function validate(data, errors) {
   if (errors.length) return null;
 
   // Setup bloquea a todas: hereda la prioridad más alta de sus historias.
-  if (setups.length === 1 && storyEntries.size) {
+  if (setups.length && storyEntries.size) {
     const best = Math.min(
       ...[...storyEntries.values()].map((e) => PRIORITIES.indexOf(e.priority)),
     );
-    setups[0].priority = PRIORITIES[best];
+    for (const setup of setups) setup.priority = PRIORITIES[best];
   }
   return { epic, featureDir, order };
 }

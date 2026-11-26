@@ -448,19 +448,9 @@ git commit -m "chore: bootstrap the project shell and the factory"
 git push
 ```
 
-Habilita auto-merge en el repo para que el label pueda funcionar (esto no
-mergea nada por sí solo: solo permite que un PR que TÚ etiquetaste `auto-merge`
-se mergee al quedar verde):
-
-```bash
-gh repo edit --enable-auto-merge 2>/dev/null || true
-gh api "repos/{owner}/{repo}" --jq .allow_auto_merge
-```
-
-Reporta lo que diga la segunda línea, no lo que pediste: en un repo privado
-con el plan gratis de GitHub, el comando no falla pero el ajuste queda en
-`false`. En ese caso di que auto-merge no está disponible en este repo y que
-los PRs se mergean a mano.
+No hace falta activar el auto-merge de GitHub: la etiqueta `auto-merge` de la
+fábrica no lo usa. `fabrica-backlog` y la nube esperan los checks del PR y lo
+mergean ellos, también en un repo privado gratis.
 
 Si para verificar arrancaste un proceso que no termina solo (el dev server,
 Metro, un emulador), apágalo antes del reporte o déjalo suelto de la sesión,

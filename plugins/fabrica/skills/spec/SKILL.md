@@ -51,12 +51,13 @@ planeación se hace en una sesión interactiva y para.
    Con el OK:
 
    ```bash
-   gh label create epic 2>/dev/null || true
-   gh issue create --title "[Epic] <nombre>" --body-file <archivo> --label epic
+   fabrica-epic create "[Epic] <nombre>" <archivo>
    ```
 
    El cuerpo dice en dos o tres frases qué es la feature y que la spec va en
-   `specs/<N>-<nombre>/`. N es el número que devuelve `gh`.
+   `specs/<N>-<nombre>/`. N es el número que imprime `fabrica-epic`. Usa
+   `fabrica-epic`, no `gh issue create`: es lo que permite `settings.json`, y
+   el modo automático puede negar el otro aunque la persona haya dicho que sí.
 
 3. **La rama**, desde lo último de la base (`factory.json` → `baseBranch`,
    `main` si falta):
@@ -90,7 +91,7 @@ planeación se hace en una sesión interactiva y para.
 
    ```bash
    git add specs/<N>-<nombre> docs/plan-maestro.md .gitignore
-   git commit -m "docs(spec): <name> (#<N>)"
+   git commit -m "docs(spec): write the spec for epic #<N>"
    git push -u origin spec-<N>
    gh pr create --draft --title "Spec: <nombre>" --body-file <archivo>
    ```
