@@ -11,6 +11,12 @@
 #   androidApk     dónde deja el APK (un valor, no un comando)
 #   androidServe   el servidor de desarrollo en primer plano (Metro)
 #   androidE2e     los flows (Maestro)
+#   androidFingerprint  opcional: imprime la huella de la parte nativa
+#                  (p. ej. @expo/fingerprint). Con ella, el APK queda en la
+#                  caché y solo se compila si la huella cambió: con el dev
+#                  client el JavaScript lo sirve Metro, y un PR que solo toca
+#                  JavaScript compilaba 20 minutos igual (PR #24 de
+#                  truckconnect-mobile, 2026-11-27).
 # Los dos últimos corren dentro del emulador, por scripts/android-e2e.sh. Sin
 # commands.androidE2e no corre nada y lo dice.
 #
@@ -40,8 +46,9 @@ permissions:
 jobs:
   android:
     runs-on: ubuntu-latest
-    # La compilación de Gradle sin caché tarda unos 10 minutos, el emulador
-    # 2 o 3 en arrancar y los flows unos minutos más.
+    # La compilación sin caché tarda unos 20 minutos en 2 núcleos, con la
+    # caché de Gradle unos 10, y con el APK en la caché nada. El emulador y
+    # los flows, unos 5.
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -70,6 +77,9 @@ jobs:
             fi
             echo "enabled=true" >> "$GITHUB_OUTPUT"
             echo "apk=$apk" >> "$GITHUB_OUTPUT"
+            if jq -e '.commands.androidFingerprint | type == "array"' factory.json >/dev/null 2>&1; then
+              echo "fingerprint=true" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "::notice title=Sin e2e de Android::factory.json no define commands.androidE2e (ni androidBuild y androidServe), así que no se corrió nada."
             echo "enabled=false" >> "$GITHUB_OUTPUT"
@@ -95,8 +105,28 @@ jobs:
             corepack enable
             echo "pnpm $(pnpm --version), el de packageManager en package.json"
           fi
-      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+      - name: Dependencias del proyecto
         if: steps.android.outputs.enabled == 'true'
+        run: fabrica-cmd install
+      # La huella suma cómo se compila: otro androidBuild u otro androidApk
+      # dan otro APK.
+      - name: Huella de la parte nativa
+        id: fingerprint
+        if: steps.android.outputs.enabled == 'true' && steps.android.outputs.fingerprint == 'true'
+        run: |
+          out=$(fabrica-cmd androidFingerprint)
+          hash=$({ printf '%s\n' "$out"; jq -c '[.commands.androidBuild, .androidApk]' factory.json; } | sha256sum | cut -c1-40)
+          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+          echo "Huella nativa: $hash"
+      - name: Trae el APK de la caché
+        id: apk-cache
+        if: steps.android.outputs.enabled == 'true' && steps.fingerprint.outputs.hash != ''
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.android.outputs.apk }}
+          key: android-apk-${{ runner.os }}-${{ steps.fingerprint.outputs.hash }}
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        if: steps.android.outputs.enabled == 'true' && steps.apk-cache.outputs.cache-hit != 'true'
         with:
           distribution: temurin
           java-version: 17
@@ -105,7 +135,7 @@ jobs:
       # 20 minutos desde cero.
       - name: Trae la caché de Gradle
         id: gradle-cache
-        if: steps.android.outputs.enabled == 'true'
+        if: steps.android.outputs.enabled == 'true' && steps.apk-cache.outputs.cache-hit != 'true'
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -113,26 +143,32 @@ jobs:
             ~/.gradle/wrapper
           key: gradle-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package-lock.json', 'app.json', 'app.config.*') }}
           restore-keys: gradle-${{ runner.os }}-
-      - name: Dependencias del proyecto
-        if: steps.android.outputs.enabled == 'true'
-        run: fabrica-cmd install
       # Con el demonio de Gradle vivo quedaban 3 GB libres de 7,7 para el
       # emulador, que se quedó sin recursos.
       - name: Compila la app
-        if: steps.android.outputs.enabled == 'true'
+        id: build
+        if: steps.android.outputs.enabled == 'true' && steps.apk-cache.outputs.cache-hit != 'true'
         run: |
           fabrica-cmd androidBuild
           pkill -f 'GradleDaemon|KotlinCompileDaemon' || true
           df -h / | tail -1
           free -h | head -2
+      # Solo en la rama principal: las cachés de un PR no las ve ningún otro
+      # PR, y cada una ocupaba 1,8 GB de los 10 GB del repo (2026-11-27).
       - name: Guarda la caché de Gradle
-        if: always() && steps.android.outputs.enabled == 'true' && steps.gradle-cache.outputs.cache-hit != 'true'
+        if: always() && steps.android.outputs.enabled == 'true' && steps.build.outcome != 'skipped' && steps.gradle-cache.outputs.cache-hit != 'true' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.gradle/caches
             ~/.gradle/wrapper
           key: gradle-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package-lock.json', 'app.json', 'app.config.*') }}
+      - name: Guarda el APK en la caché
+        if: always() && steps.android.outputs.enabled == 'true' && steps.build.outcome == 'success' && steps.fingerprint.outputs.hash != ''
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ steps.android.outputs.apk }}
+          key: android-apk-${{ runner.os }}-${{ steps.fingerprint.outputs.hash }}
       - name: Instala Maestro
         if: steps.android.outputs.enabled == 'true'
         env:
