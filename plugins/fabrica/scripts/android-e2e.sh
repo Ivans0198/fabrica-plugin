@@ -62,4 +62,23 @@ until curl -fs "http://localhost:$PORT/status" 2>/dev/null | grep -q running; do
 done
 echo "✓ Servidor de desarrollo arriba en el puerto $PORT"
 
+# El bundle se arma antes de los flows, con el emulador quieto. Armarlo
+# cuando la app lo pedía, con 2 núcleos, dejó al emulador sin CPU y los tres
+# flows en rojo (PR #21 de truckconnect-mobile, 2026-11-26). La URL sale del
+# manifiesto de Expo; con otro servidor, se salta.
+bundle=$(curl -fs -m 30 -H "expo-platform: android" -H "accept: application/expo+json" \
+  "http://localhost:$PORT/" 2>/dev/null | jq -r '.launchAsset.url // empty' 2>/dev/null || true)
+if [ -z "$bundle" ]; then
+  echo "⚠ El servidor no dio el manifiesto de Expo: no armo el bundle antes de los flows." >&2
+else
+  echo "::group::Arma el bundle"
+  started=$SECONDS
+  if curl -fs -m "${FABRICA_ANDROID_BUNDLE_WAIT:-900}" -o /dev/null "$bundle"; then
+    echo "✓ Bundle armado en $((SECONDS - started))s"
+  else
+    echo "⚠ No pude armar el bundle antes de los flows; la app lo pedirá al arrancar." >&2
+  fi
+  echo "::endgroup::"
+fi
+
 fabrica-cmd androidE2e

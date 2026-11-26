@@ -100,9 +100,13 @@ jobs:
         with:
           distribution: temurin
           java-version: 17
-      - name: Caché de Gradle
+      # Restaurar y guardar por separado: actions/cache solo guarda si el job
+      # termina bien, y un flow en rojo dejaba la próxima corrida compilando
+      # 20 minutos desde cero.
+      - name: Trae la caché de Gradle
+        id: gradle-cache
         if: steps.android.outputs.enabled == 'true'
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.gradle/caches
@@ -112,12 +116,23 @@ jobs:
       - name: Dependencias del proyecto
         if: steps.android.outputs.enabled == 'true'
         run: fabrica-cmd install
+      # Con el demonio de Gradle vivo quedaban 3 GB libres de 7,7 para el
+      # emulador, que se quedó sin recursos.
       - name: Compila la app
         if: steps.android.outputs.enabled == 'true'
         run: |
           fabrica-cmd androidBuild
+          pkill -f 'GradleDaemon|KotlinCompileDaemon' || true
           df -h / | tail -1
           free -h | head -2
+      - name: Guarda la caché de Gradle
+        if: always() && steps.android.outputs.enabled == 'true' && steps.gradle-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package-lock.json', 'app.json', 'app.config.*') }}
       - name: Instala Maestro
         if: steps.android.outputs.enabled == 'true'
         env:
@@ -136,9 +151,13 @@ jobs:
         if: steps.android.outputs.enabled == 'true'
         uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
         with:
-          api-level: 35
+          # Un repo privado corre en 2 núcleos y 7,7 GB: con la API 35 de
+          # Google el emulador se quedó sin CPU (PR #21 de truckconnect-mobile).
+          # La 31 sin servicios de Google pesa menos.
+          api-level: 31
           arch: x86_64
-          target: google_apis
+          target: default
+          ram-size: 2048M
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
           script: bash "${{ runner.temp }}/fabrica-plugin/plugins/fabrica/scripts/android-e2e.sh" "${{ steps.android.outputs.apk }}" "${{ runner.temp }}/android-logs"

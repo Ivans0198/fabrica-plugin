@@ -139,6 +139,28 @@ describe("android-e2e.yml", () => {
     expect(all.find((s) => s.id === "android")!.run).toContain("androidApk");
   });
 
+  // Un flow en rojo no guardaba la caché, y la siguiente corrida compilaba
+  // 20 minutos desde cero (PR #21 de truckconnect-mobile, 2026-11-26).
+  it("guarda la caché de Gradle aunque el job falle", () => {
+    const all = steps();
+    const save = all.find((s) => s.uses?.startsWith("actions/cache/save@"))!;
+    const restore = all.find((s) =>
+      s.uses?.startsWith("actions/cache/restore@"),
+    )!;
+
+    expect(save.if).toContain("always()");
+    expect(restore.id).toBeDefined();
+    expect(save.with?.key).toBe(restore.with?.key);
+  });
+
+  it("apaga el demonio de Gradle antes del emulador", () => {
+    const build = steps().find((s) =>
+      (s.run ?? "").includes("fabrica-cmd androidBuild"),
+    )!;
+
+    expect(build.run).toMatch(/pkill .*GradleDaemon/);
+  });
+
   it("tiene un tope de tiempo", () => {
     const job = Object.values(parse(WORKFLOW).jobs)[0]!;
 

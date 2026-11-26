@@ -36,6 +36,9 @@ afterEach(() => {
 
 interface Fake {
   install?: number;
+  /** El servidor no da el manifiesto de Expo. */
+  noManifest?: boolean;
+  bundleFails?: boolean;
   noApk?: boolean;
   e2e?: number;
   /** El servidor se muere al arrancar. */
@@ -64,7 +67,12 @@ esac`),
   );
   writeFileSync(
     path.join(bin, "curl"),
-    script(`n=$(cat "${log}.curl" 2>/dev/null || echo 0); echo $((n + 1)) > "${log}.curl"
+    script(`case "$*" in
+  *expo-platform*)
+    ${fake.noManifest ? "exit 7" : `echo '{"launchAsset":{"url":"http://localhost:8081/index.bundle?platform=android"}}'; exit 0`} ;;
+  *index.bundle*) echo "curl bundle" >> "${log}"; exit ${fake.bundleFails ? 7 : 0} ;;
+esac
+n=$(cat "${log}.curl" 2>/dev/null || echo 0); echo $((n + 1)) > "${log}.curl"
 [ "$n" -ge ${fake.slowStatus ?? 0} ] || exit 7
 echo "packager-status:running"`),
   );
@@ -125,6 +133,29 @@ describe("android-e2e.sh", () => {
     expect(readFileSync(path.join(r.logs, "logcat.txt"), "utf8")).toContain(
       "logcat de mentira",
     );
+  });
+
+  // Con 2 núcleos, Metro armando el bundle cuando la app lo pedía dejó al
+  // emulador sin CPU: "hanging thread QEMU2 CPU0" y los tres flows en rojo
+  // (PR #21 de truckconnect-mobile, 2026-11-26). Se arma antes de los flows.
+  it("arma el bundle de la app antes de correr los flows", () => {
+    const r = run();
+
+    expect(r.code, r.err).toBe(0);
+    const calls = r.calls.split("\n");
+    const bundle = calls.indexOf("curl bundle");
+    expect(bundle).toBeGreaterThan(-1);
+    expect(bundle).toBeLessThan(calls.indexOf("fabrica-cmd androidE2e"));
+  });
+
+  it("si el servidor no es de Expo o el bundle falla, avisa y corre los flows igual", () => {
+    for (const fake of [{ noManifest: true }, { bundleFails: true }]) {
+      const r = run(fake);
+
+      expect(r.code, r.err).toBe(0);
+      expect(r.err).toMatch(/bundle/);
+      expect(r.calls).toContain("fabrica-cmd androidE2e");
+    }
   });
 
   it("sale con el código de los flows si fallan", () => {
