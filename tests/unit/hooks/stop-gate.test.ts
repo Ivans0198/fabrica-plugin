@@ -1035,6 +1035,120 @@ describe("guard de árbol limpio", () => {
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );
 
+  // Conventional Commits, en inglés (decidido el 2026-11-26). El gate solo mira
+  // los commits que no se subieron: arreglarlos no pide --force, y el
+  // historial de antes de la fábrica no lo traba.
+  describe("formato de commit con commitFormat conventional", () => {
+    async function repoWithFormat(format: string | null): Promise<void> {
+      ({ workDir, originDir } = await createFixtureRepo());
+      const set =
+        format === null
+          ? ""
+          : `node -e 'const f=JSON.parse(require("fs").readFileSync("factory.json","utf8")); f.commitFormat="${format}"; require("fs").writeFileSync("factory.json", JSON.stringify(f))'
+             git commit -qam "chore: use conventional commits" && git push -q origin HEAD:main`;
+      const { code, stderr } = await runBashScript(
+        workDir,
+        `set -e
+         ${set}
+         git checkout -q -b impl-7`,
+      );
+      expect(code, stderr).toBe(0);
+    }
+
+    async function gate(after: string): Promise<RunResult & { ran: boolean }> {
+      const { code: prepared, stderr: prepError } = await runBashScript(
+        workDir,
+        `set -e
+         echo 'export const foo = 2;' > src/lib/foo.ts
+         ${after}`,
+      );
+      expect(prepared, prepError).toBe(0);
+      const { binDir, markerFile } = await installChecksRanMarkerBin();
+      stubBinDir = binDir;
+      const result = await runStopGate(workDir, {
+        ...process.env,
+        PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+      });
+      return { ...result, ran: await checksRan(markerFile) };
+    }
+
+    it(
+      "bloquea un commit sin subir que no cumple, sin correr los checks, y dice cómo arreglarlo",
+      async () => {
+        await repoWithFormat("conventional");
+
+        const { code, stderr, ran } = await gate(
+          `git commit -qam "cambia foo"`,
+        );
+
+        expect(code).toBe(2);
+        expect(stderr).toContain("cambia foo");
+        expect(stderr).toContain("Conventional Commits");
+        expect(stderr).toContain("git commit --amend");
+        expect(ran).toBe(false);
+      },
+      REAL_PROCESS_TEST_TIMEOUT_MS,
+    );
+
+    it.each([
+      "feat(lib): bump foo to 2",
+      "fix: keep foo at two",
+      "refactor(lib)!: rename foo",
+      "chore(release): 0.5.23",
+    ])(
+      "deja pasar %s",
+      async (message) => {
+        await repoWithFormat("conventional");
+
+        const { code, ran } = await gate(`git commit -qam "${message}"`);
+
+        expect(code).toBe(0);
+        expect(ran).toBe(true);
+      },
+      REAL_PROCESS_TEST_TIMEOUT_MS,
+    );
+
+    it(
+      "bloquea un encabezado de más de 100 caracteres",
+      async () => {
+        await repoWithFormat("conventional");
+
+        const { code } = await gate(
+          `git commit -qam "feat: ${"a".repeat(100)}"`,
+        );
+
+        expect(code).toBe(2);
+      },
+      REAL_PROCESS_TEST_TIMEOUT_MS,
+    );
+
+    it(
+      "no mira los commits ya subidos",
+      async () => {
+        await repoWithFormat("conventional");
+
+        const { code } = await gate(
+          `git commit -qam "cambia foo" && git push -q -u origin impl-7`,
+        );
+
+        expect(code).toBe(0);
+      },
+      REAL_PROCESS_TEST_TIMEOUT_MS,
+    );
+
+    it(
+      "sin commitFormat no exige nada",
+      async () => {
+        await repoWithFormat(null);
+
+        const { code } = await gate(`git commit -qam "cambia foo"`);
+
+        expect(code).toBe(0);
+      },
+      REAL_PROCESS_TEST_TIMEOUT_MS,
+    );
+  });
+
   it.each([
     ["el Stop gate", "stop"],
     ["el hook de formato", "format"],
