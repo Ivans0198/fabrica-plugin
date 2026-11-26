@@ -26,7 +26,7 @@ interactiva y para.
    `**Generated with**:` y la primera parte de `.specify/fabrica-version` (las
    versiones de la fábrica y de Spec Kit). La constitución no está en git, y
    así queda constancia de con qué reglas se planeó.
-5. Commit y push a la misma rama (`git commit -m "Plan de <nombre> (#<N>)"`,
+5. Commit y push a la misma rama (`git commit -m "docs(plan): <name> (#<N>)"`,
    `git push`). El PR se actualiza solo.
 
 ## Sigues o paras

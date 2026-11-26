@@ -45,7 +45,7 @@ planeación se hace en una sesión interactiva y para.
    Si algo falla, corrígelo con la persona. No commitees un `tasks.md` que no
    lo cumpla: `fabrica-create-issues` lo va a rechazar después.
 
-4. Commit y push a la misma rama (`git commit -m "Tareas de <nombre> (#<N>)"`,
+4. Commit y push a la misma rama (`git commit -m "docs(tasks): <name> (#<N>)"`,
    `git push`).
 5. Saca el PR de borrador si la persona lo pide (`gh pr ready`).
 

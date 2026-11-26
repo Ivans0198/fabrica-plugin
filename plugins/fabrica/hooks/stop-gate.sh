@@ -118,6 +118,24 @@ Revert those changes (git checkout origin/<base> -- <file>, then commit). If the
   fi
 fi
 
+# Commit format guard: with factory.json → commitFormat "conventional", the
+# commits never pushed follow Conventional Commits. The ones about to be
+# pushed are checked earlier, by hooks/commit-format.sh: once pushed, fixing
+# them would need --force. History from before the factory never blocks.
+# shellcheck source=../scripts/lib/commit-format.sh
+source "$(dirname "${BASH_SOURCE[0]}")/../scripts/lib/commit-format.sh"
+if commit_format_enabled; then
+  since=$(commit_format_since)
+  if [ -n "$since" ]; then
+    bad=$(commit_format_bad "$since")
+    if [ -n "$bad" ]; then
+      fail "❌ These commits do not follow Conventional Commits (factory.json → commitFormat):
+$bad
+$(commit_format_help "$since")"
+    fi
+  fi
+fi
+
 # Review-only guard: if the session changed nothing beyond generated noise
 # (clean tree modulo GENERATED_NOISE_FILES) and HEAD is already verified,
 # there is nothing to verify. Don't run the full suite just to end a Q&A

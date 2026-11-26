@@ -431,6 +431,52 @@ describe("planeación con Spec Kit", () => {
     });
   });
 
+  // Conventional Commits en inglés, en los proyectos y en el plugin
+  // (decidido el 2026-11-26).
+  describe("formato de commit", () => {
+    const CONVENTIONAL =
+      /^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._/-]+\))?!?: \S/;
+
+    it("las reglas lo piden en inglés y nombran commitFormat", () => {
+      expect(read("rules/fabrica.md")).toMatch(
+        /Conventional Commits, in English[\s\S]{0,500}commitFormat/,
+      );
+    });
+
+    it("la plantilla de factory.json lo deja activado", () => {
+      const factory = JSON.parse(read("templates/factory.example.json")) as {
+        commitFormat?: string;
+      };
+      expect(factory.commitFormat).toBe("conventional");
+    });
+
+    it("los mensajes fijos de los skills y workflows lo cumplen", () => {
+      const sources = [
+        ...SKILLS.map((s) => read(`skills/${s}/SKILL.md`)),
+        readFileSync(
+          path.join(REPO_ROOT, ".github/workflows/visual-baselines.yml"),
+          "utf8",
+        ),
+      ];
+      const messages = sources.flatMap((text) =>
+        [...text.matchAll(/git commit -m "([^"]+)"/g)].map((m) => m[1]),
+      );
+
+      expect(messages.length).toBeGreaterThanOrEqual(5);
+      for (const message of messages) expect(message).toMatch(CONVENTIONAL);
+    });
+
+    it("hooks.json corre el hook de commit antes de cada Bash", () => {
+      expect(read("hooks/hooks.json")).toContain("hooks/commit-format.sh");
+    });
+
+    it("la guía dice cómo activarlo en un proyecto que ya existe", () => {
+      expect(read("docs/GUIA-DE-LA-FABRICA.md")).toMatch(
+        /Conventional Commits[\s\S]{0,800}"commitFormat": "conventional"/,
+      );
+    });
+  });
+
   // Lo que faltó en la prueba con truckconnect-mobile (bitácora, 2026-11-26).
   describe("lo que faltó en truckconnect-mobile", () => {
     const guide = () => read("docs/GUIA-DE-LA-FABRICA.md");

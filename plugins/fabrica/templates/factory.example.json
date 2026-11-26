@@ -12,6 +12,7 @@
   "appUrl": null,
   "factoryEpic": null,
   "docLang": "es",
+  "commitFormat": "conventional",
   "format": [
     {
       "extensions": ["ts", "tsx", "js", "jsx", "json", "css", "md"],

@@ -16,7 +16,9 @@ de la fase.
 
 - Sin `Co-Authored-By` y sin mencionar a Anthropic ni a Claude.
 - Stage por ruta, nunca `git add .` ni `-A`.
-- Mensajes en español, en el estilo de los commits anteriores.
+- Mensajes con Conventional Commits, en inglés (desde la 0.5.23):
+  `feat(hooks): check commit subjects before a push`. La versión va como
+  `chore(release): 0.5.x`.
 
 ## Publicación
 

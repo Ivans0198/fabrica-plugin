@@ -894,6 +894,20 @@ lo tuyo al `.fabrica-new`, reemplaza el archivo con él y borra el
 `.fabrica-new` sin combinar, `/fabrica:backlog` se niega a arrancar: un
 obrero con reglas de otra versión trabajaría distinto de lo que esperas.
 
+**El formato de los commits.** Desde la 0.5.23 la fábrica escribe sus
+commits con **Conventional Commits**, en inglés aunque las specs vayan en
+español: `feat(orders): accept an order from its detail`, `fix(auth): …`,
+`docs(spec): …`. Un proyecto nuevo nace con la regla activada. Para
+activarla en uno que ya existe, agrega a su `factory.json`:
+
+```json
+"commitFormat": "conventional"
+```
+
+Con eso, el hook de `git push` no deja subir un commit que no cumpla, y el
+Stop gate no deja terminar con uno sin subir. Solo miran los commits que
+todavía no están en GitHub: el historial de antes no molesta.
+
 **Un proyecto creado con la plantilla vieja (`fabrica-template`).** Commitea o
 guarda lo que tengas a medias, instala el plugin en el proyecto y pídele a
 Claude _"corre fabrica-setup init"_. Reconoce la plantilla y la migra:

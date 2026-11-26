@@ -212,6 +212,9 @@ bloquea cada ticket.
   abajo). Sin UI, en `null`.
 - **`appUrl`**: la URL de ese dev server. Sin UI, `null`.
 - **`docLang`**: `es` o `en`, el idioma de issues, specs y PRs.
+- **`commitFormat`**: queda en `"conventional"`. Los commits siguen
+  Conventional Commits, en inglés aunque `docLang` sea `es`, y el Stop gate y
+  el hook de `git push` lo exigen. Quítalo solo si la persona usa otro formato.
 - **`factoryEpic`**: queda en `null`. Ver 4.1.5.
 - **`format`**: una regla por herramienta, con las extensiones que toca y el
   comando, al que el hook le agrega el archivo editado al final. Un stack sin
@@ -441,7 +444,7 @@ número de tests no cambia con un worktree creado.
 
 ```bash
 git add -A
-git commit -m "Bootstrap: cáscara del proyecto + kit de fábrica configurado"
+git commit -m "chore: bootstrap the project shell and the factory"
 git push
 ```
 

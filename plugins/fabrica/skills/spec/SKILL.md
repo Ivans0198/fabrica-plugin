@@ -90,7 +90,7 @@ planeación se hace en una sesión interactiva y para.
 
    ```bash
    git add specs/<N>-<nombre> docs/plan-maestro.md .gitignore
-   git commit -m "Spec de <nombre> (#<N>)"
+   git commit -m "docs(spec): <name> (#<N>)"
    git push -u origin spec-<N>
    gh pr create --draft --title "Spec: <nombre>" --body-file <archivo>
    ```
