@@ -167,10 +167,14 @@ describe("reusable workflows", () => {
         .flatMap((job) => job.steps ?? [])
         .find((s) => s.uses?.startsWith("anthropics/claude-code-action"));
 
-      expect(action?.with?.plugin_marketplaces).toBe(
+      // Primero fabrica, de la copia fijada; después los extraPlugins del
+      // proyecto (workflows/extra-plugins.test.ts).
+      expect(action?.with?.plugin_marketplaces?.split("\n")[0]).toBe(
         "${{ runner.temp }}/fabrica-plugin",
       );
-      expect(action?.with?.plugins).toBe(`fabrica@${MARKETPLACE}`);
+      expect(action?.with?.plugins?.split("\n")[0]).toBe(
+        `fabrica@${MARKETPLACE}`,
+      );
     },
   );
 

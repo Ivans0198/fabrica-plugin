@@ -101,6 +101,21 @@ jobs:
           [[ "${base:-main}" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "baseBranch inválida en factory.json" >&2; exit 1; }
           echo "FABRICA_BASE=${base:-main}" >> "$GITHUB_ENV"
 
+      # Los plugins que el proyecto suma a la fábrica (factory.json →
+      # extraPlugins), leídos antes de que el agente toque nada. Sin la
+      # lista, la nube cargaba solo fabrica aunque el host tuviera más.
+      - name: Lee los plugins extra de factory.json
+        id: extra
+        run: |
+          {
+            echo "plugins<<FABRICA_EOF"
+            bash "$FABRICA/scripts/extra-plugins.sh" plugins
+            echo "FABRICA_EOF"
+            echo "marketplaces<<FABRICA_EOF"
+            bash "$FABRICA/scripts/extra-plugins.sh" marketplaces
+            echo "FABRICA_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Resolver credencial del actor
         id: cred
         shell: bash
@@ -205,8 +220,12 @@ jobs:
         with:
           claude_code_oauth_token: ${{ steps.cred.outputs.oauth }}
           anthropic_api_key: ${{ steps.cred.outputs.api }}
-          plugin_marketplaces: ${{ runner.temp }}/fabrica-plugin
-          plugins: fabrica@fabrica-local
+          plugin_marketplaces: |
+            ${{ runner.temp }}/fabrica-plugin
+            ${{ steps.extra.outputs.marketplaces }}
+          plugins: |
+            fabrica@fabrica-local
+            ${{ steps.extra.outputs.plugins }}
           restrict_untrusted_prs: ${{ steps.trust.outputs.restrict }}
           claude_args: "--max-turns 50 --model ${{ env.FACTORY_MODEL }}"
           # Sin prompt: la Action lee la mención y responde en el hilo.

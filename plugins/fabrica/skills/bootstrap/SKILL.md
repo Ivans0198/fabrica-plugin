@@ -450,8 +450,19 @@ mergea nada por sí solo: solo permite que un PR que TÚ etiquetaste `auto-merge
 se mergee al quedar verde):
 
 ```bash
-gh repo edit --enable-auto-merge 2>/dev/null || echo "⚠ actívalo a mano en Settings → General"
+gh repo edit --enable-auto-merge 2>/dev/null || true
+gh api "repos/{owner}/{repo}" --jq .allow_auto_merge
 ```
+
+Reporta lo que diga la segunda línea, no lo que pediste: en un repo privado
+con el plan gratis de GitHub, el comando no falla pero el ajuste queda en
+`false`. En ese caso di que auto-merge no está disponible en este repo y que
+los PRs se mergean a mano.
+
+Si para verificar arrancaste un proceso que no termina solo (el dev server,
+Metro, un emulador), apágalo antes del reporte o déjalo suelto de la sesión,
+como dicen las reglas: si queda como hijo de la sesión, `claude -p` no
+termina.
 
 **Reporta al salir:** los cuatro checks con su resultado real y el commit
 pusheado.
@@ -553,13 +564,26 @@ reglas): la tabla de revisión de `fabrica:issues` no se salta nunca.
 **En ambos casos, ofrece el tablero** (opcional, nunca por defecto):
 
 > ¿Quieres el tablero visual de GitHub (Projects v2)? Son 2 minutos, pero hay
-> 2 cosas que solo puedes hacer tú: `gh auth refresh -s project,repo` (te abre
-> el navegador) y activar 3 interruptores en la UI del Project.
+> 2 cosas que solo puedes hacer tú: darle a `gh` el permiso de los tableros
+> (en una terminal aparte, porque abre el navegador:
+> `gh auth refresh -h github.com -s project,repo`) y activar 3 workflows en
+> la página del Project.
 
 Si aceptan: `gh project create --owner @me --title "<repo>"`, `gh project link`,
-y `bash "${CLAUDE_PLUGIN_ROOT}/scripts/project-setup.sh" <owner> <número>`. Luego recuérdales los tres
-workflows a activar (**Item added → Todo**, **Item closed → Done**, **PR merged
-→ Done**) y agrupar la vista por **Parent issue**.
+y `bash "${CLAUDE_PLUGIN_ROOT}/scripts/project-setup.sh" <owner> <número>`, que además crea la
+columna **Blocked** si falta. Commitea `.plan/project.json`: los workers lo
+necesitan en su worktree. Luego pásales lo que imprime el script: el botón
+**Workflows** de la página del Project, los tres a activar (**Item added →
+Todo**, **Item closed → Done**, **PR merged → Done**), que un workflow en
+"A value is required" solo necesita que se vuelva a elegir el valor, y
+agrupar la vista por **Parent issue**.
+
+**Plugins extra.** Si la persona suma otro plugin al proyecto (el de Expo,
+por ejemplo), además de instalarlo con `--scope project` va en
+`factory.json` → `extraPlugins` con su marketplace y los dominios que
+necesite: la nube y el dev container solo lo cargan desde ahí. Si ya hay
+`.devcontainer/`, regenéralo con `fabrica-devcontainer --force` (con sus
+opciones) para que el firewall deje salir a esos dominios.
 
 ### 4.3 Perfil del stack (ofrécelo si falta)
 

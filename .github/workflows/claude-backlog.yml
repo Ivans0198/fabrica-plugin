@@ -119,6 +119,22 @@ jobs:
           [[ "${base:-main}" =~ ^[A-Za-z0-9._/-]+$ ]] || { echo "baseBranch inválida en factory.json" >&2; exit 1; }
           echo "FABRICA_BASE=${base:-main}" >> "$GITHUB_ENV"
 
+      # Los plugins que el proyecto suma a la fábrica (factory.json →
+      # extraPlugins), leídos antes de que el agente toque nada. Sin la
+      # lista, la nube cargaba solo fabrica aunque el host tuviera más.
+      - name: Lee los plugins extra de factory.json
+        id: extra
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          {
+            echo "plugins<<FABRICA_EOF"
+            bash "$FABRICA/scripts/extra-plugins.sh" plugins
+            echo "FABRICA_EOF"
+            echo "marketplaces<<FABRICA_EOF"
+            bash "$FABRICA/scripts/extra-plugins.sh" marketplaces
+            echo "FABRICA_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       # El mismo archivo que lee el worker local, para que la nube y la
       # máquina no se separen.
       - name: Lee las herramientas prohibidas al worker
@@ -202,8 +218,12 @@ jobs:
           anthropic_api_key: ${{ steps.cred.outputs.api }}
           # El plugin en la versión que fijó el proyecto, desde la copia local
           # de arriba: con la URL Git la nube instalaría siempre la última.
-          plugin_marketplaces: ${{ runner.temp }}/fabrica-plugin
-          plugins: fabrica@fabrica-local
+          plugin_marketplaces: |
+            ${{ runner.temp }}/fabrica-plugin
+            ${{ steps.extra.outputs.marketplaces }}
+          plugins: |
+            fabrica@fabrica-local
+            ${{ steps.extra.outputs.plugins }}
           prompt: ${{ steps.prompt.outputs.text }}
           # Un worker que se queda sin turnos a mitad de ticket no alcanza ni a
           # commitear lo que ya tenía verde.
