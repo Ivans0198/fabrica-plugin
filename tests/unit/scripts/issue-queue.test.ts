@@ -109,7 +109,11 @@ case "$1 $2" in
       *) echo "\${FAKE_PR_COUNT:-0}" ;;
     esac ;;
   "pr merge") [ -n "\${FAKE_FAIL_MERGE:-}" ] && { echo "no se pudo mergear" >&2; exit 1; } ;;
-  "pr view") echo "main abc123"; exit 0 ;;
+  "pr view")
+    # FAKE_PR_VIEW_JSON: commits, comentarios y revisiones del PR, como gh.
+    case "$*" in *comments*) echo "\${FAKE_PR_VIEW_JSON:-{\}}"; exit 0 ;; esac
+    echo "main abc123"; exit 0 ;;
+  "api repos/{owner}/{repo}/pulls/"*"/comments") echo "\${FAKE_INLINE_JSON:-[]}"; exit 0 ;;
   "pr diff") printf '%s\n' "\${FAKE_DIFF:-}"; exit 0 ;;
   "pr checks")
     # FAKE_CHECKS: lo que contesta cada llamada, en orden (0 pasa, 1 falla,
@@ -358,6 +362,189 @@ describe("comandos de la cola", () => {
     },
     TIMEOUT,
   );
+
+  // fabrica-backlog ya reclamó la issue y preparó el worktree antes de lanzar
+  // al worker, y el prompt le pide `fabrica-claim N`: respondía "ya en curso"
+  // (truckconnect-mobile #5) o se negaba porque main había cambiado mientras
+  // tanto (#6, 2026-11-26).
+  it(
+    "fabrica-claim dentro de un worker ya reclamado solo imprime la ruta",
+    async () => {
+      const { repo, env } = await project();
+      await git(repo, "git worktree add -q -b impl-5 .claude/worktrees/impl-5");
+
+      const { code, stdout, stderr } = await run(["claim", "5"], repo, {
+        ...env,
+        FABRICA_CLAIMED: "5",
+        FAKE_LABELS_5: "in-progress",
+      });
+
+      expect(code, stderr).toBe(0);
+      expect(stdout.trim()).toBe(path.join(repo, ".claude/worktrees/impl-5"));
+      expect(await calls()).not.toMatch(/issue edit/);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "FABRICA_CLAIMED de otra issue no salta el reclamo",
+    async () => {
+      const { repo, env } = await project();
+
+      const { code } = await run(["claim", "5"], repo, {
+        ...env,
+        FABRICA_CLAIMED: "6",
+        FAKE_LABELS_5: "in-progress",
+      });
+
+      expect(code).toBe(2);
+    },
+    TIMEOUT,
+  );
+
+  // Devuelta a la cola con un pedido en el PR, el worker vio el PR con
+  // Closes #16 y paró en un minuto: "ya estaba implementada"
+  // (truckconnect-mobile #16, 2026-11-26).
+  describe("lo pedido en el PR abierto", () => {
+    const PR_VIEW = JSON.stringify({
+      commits: [
+        { committedDate: "2026-11-26T10:00:00Z" },
+        { committedDate: "2026-11-26T11:00:00Z" },
+      ],
+      comments: [
+        {
+          createdAt: "2026-11-26T10:30:00Z",
+          author: { login: "ivan" },
+          body: "viejo, ya atendido",
+        },
+        {
+          createdAt: "2026-11-26T12:00:00Z",
+          author: { login: "ivan" },
+          body: "En el emulador falla MessageEvent",
+        },
+        {
+          createdAt: "2026-11-26T12:05:00Z",
+          author: { login: "github-actions" },
+          body: "checks en verde",
+        },
+      ],
+      reviews: [
+        {
+          submittedAt: "2026-11-26T12:10:00Z",
+          author: { login: "ivan" },
+          state: "CHANGES_REQUESTED",
+          body: "Saca msw del nativo",
+        },
+        {
+          submittedAt: "2026-11-26T12:11:00Z",
+          author: { login: "ivan" },
+          state: "COMMENTED",
+          body: "",
+        },
+      ],
+    });
+    const INLINE = JSON.stringify([
+      {
+        created_at: "2026-11-26T12:20:00Z",
+        user: { login: "ivan" },
+        path: "index.js",
+        line: 4,
+        body: "esto solo en __DEV__",
+      },
+      {
+        created_at: "2026-11-26T09:00:00Z",
+        user: { login: "ivan" },
+        path: "a.ts",
+        line: 1,
+        body: "anterior",
+      },
+    ]);
+
+    it(
+      "fabrica-claim muestra lo que se pidió después del último commit",
+      async () => {
+        const { repo, env } = await project();
+
+        const { code, stdout, stderr } = await run(["claim", "5"], repo, {
+          ...env,
+          FAKE_HEAD_PR: "17",
+          FAKE_PR_VIEW_JSON: PR_VIEW,
+          FAKE_INLINE_JSON: INLINE,
+        });
+
+        expect(code, stderr).toBe(0);
+        expect(stdout.trim().split("\n").pop()).toBe(
+          path.join(repo, ".claude/worktrees/impl-5"),
+        );
+        expect(stderr).toMatch(/PR #17/);
+        expect(stderr).toMatch(/no está hecha/);
+        expect(stderr).toContain("En el emulador falla MessageEvent");
+        expect(stderr).toContain("Saca msw del nativo");
+        expect(stderr).toContain("index.js:4");
+        expect(stderr).toContain("esto solo en __DEV__");
+        expect(stderr).not.toContain("viejo, ya atendido");
+        expect(stderr).not.toContain("anterior");
+        expect(stderr).not.toContain("checks en verde");
+        // El pedido sale antes que lo de la revisión en el código, por hora.
+        expect(stderr.indexOf("MessageEvent")).toBeLessThan(
+          stderr.indexOf("__DEV__"),
+        );
+      },
+      TIMEOUT,
+    );
+
+    it(
+      "también en el worker ya reclamado",
+      async () => {
+        const { repo, env } = await project();
+        await git(
+          repo,
+          "git worktree add -q -b impl-5 .claude/worktrees/impl-5",
+        );
+
+        const { stderr } = await run(["claim", "5"], repo, {
+          ...env,
+          FABRICA_CLAIMED: "5",
+          FAKE_HEAD_PR: "17",
+          FAKE_PR_VIEW_JSON: PR_VIEW,
+        });
+
+        expect(stderr).toContain("Saca msw del nativo");
+      },
+      TIMEOUT,
+    );
+
+    it(
+      "sin PR abierto, o sin nada nuevo, no dice nada",
+      async () => {
+        const { repo, env } = await project();
+        const nothingNew = JSON.stringify({
+          commits: [{ committedDate: "2026-11-26T13:00:00Z" }],
+          comments: [
+            {
+              createdAt: "2026-11-26T12:00:00Z",
+              author: { login: "ivan" },
+              body: "atendido",
+            },
+          ],
+          reviews: [],
+        });
+
+        for (const extra of [
+          {},
+          { FAKE_HEAD_PR: "17", FAKE_PR_VIEW_JSON: nothingNew },
+        ]) {
+          const { code, stderr } = await run(["claim", "5"], repo, {
+            ...env,
+            ...extra,
+          });
+          expect(code, stderr).toBe(0);
+          expect(stderr).not.toMatch(/PR #17/);
+        }
+      },
+      TIMEOUT,
+    );
+  });
 
   // Un worktree nuevo no trae node_modules: sin dependencias fallaban todas
   // las pruebas y el worker gastaba tiempo en descubrirlo (refastidioso #8).
@@ -632,6 +819,8 @@ describe("comandos de la cola", () => {
       async () => {
         const { repo, env } = await project();
         await run(["claim", "5"], repo, env);
+        // La salida que fabrica-backlog guarda junto al worktree.
+        await writeFile(`${worktree(repo, 5)}.log`, "resumen\n");
 
         const { code, stdout } = await run(["cleanup"], repo, {
           ...env,
@@ -641,6 +830,7 @@ describe("comandos de la cola", () => {
         expect(code).toBe(0);
         expect(stdout).toMatch(/impl-5/);
         expect(existsSync(worktree(repo, 5))).toBe(false);
+        expect(existsSync(`${worktree(repo, 5)}.log`)).toBe(false);
         const branches = await git(repo, "git branch --list impl-5");
         expect(branches.stdout.trim()).toBe("");
       },

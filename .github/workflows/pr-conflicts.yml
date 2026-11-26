@@ -1,5 +1,5 @@
 # Reusable workflow: avisa en los PRs de la fábrica que chocan con la rama
-# principal. Un PR choca después de abierto cuando se mergea otro, y nadie le
+# principal, y de los commits que entran a ella sin un PR mergeado. Un PR choca después de abierto cuando se mergea otro, y nadie le
 # hace rebase. No lo resuelve: etiqueta merge-conflict y comenta una vez, y
 # quita la etiqueta cuando el PR vuelve a poder mergearse. Sin Claude: gratis,
 # con el token de GitHub.
@@ -49,3 +49,33 @@ jobs:
           persist-credentials: false
       - name: Avisa en los PRs que chocan
         run: bash .fabrica-plugin/plugins/fabrica/scripts/flag-conflicts.sh
+
+  # Sin branch protection (un repo privado sin GitHub Pro) nada frena un push
+  # a la rama principal. No lo frena: abre una issue direct-push.
+  direct-push:
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch)
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      # La lista de PRs de cada commit.
+      pull-requests: read
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Trae el plugin fabrica
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.fabrica_repo }}
+          ref: ${{ inputs.fabrica_ref }}
+          path: .fabrica-plugin
+          token: ${{ secrets.FABRICA_PLUGIN_TOKEN || github.token }}
+          persist-credentials: false
+      - name: Avisa de commits sin PR
+        env:
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+        run: bash .fabrica-plugin/plugins/fabrica/scripts/main-push-check.sh "$BEFORE" "$AFTER"
