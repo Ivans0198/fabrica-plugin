@@ -12,7 +12,8 @@
 #   --force       reemplaza un .devcontainer/ que ya existe
 #
 # Si el package.json pide pnpm en packageManager, pnpm va en la imagen, en
-# esa versión.
+# esa versión. Los dominios de factory.json → extraPlugins (el MCP de un
+# plugin, por ejemplo) van al firewall.
 #
 # Requires: jq.
 
@@ -70,6 +71,14 @@ if [[ "$pm" == pnpm@* ]]; then
     || die "packageManager raro en package.json: '$pm'. Usa pnpm@<mayor.menor.parche>"
 fi
 
+# Los plugins extra del proyecto: se validan antes de escribir nada.
+EXTRA="$(dirname "${BASH_SOURCE[0]}")/extra-plugins.sh"
+extra_plugins=$(bash "$EXTRA" plugins) || exit 1
+extra_marketplaces=$(bash "$EXTRA" marketplaces)
+while IFS= read -r d; do
+  [ -n "$d" ] && domains+=("$d")
+done < <(bash "$EXTRA" domains)
+
 mkdir -p "$DEST"
 cp "$TEMPLATES/Dockerfile" "$DEST/Dockerfile"
 if [ -n "$pnpm_version" ]; then
@@ -125,3 +134,8 @@ echo "✓ $DEST/ escrito: Dockerfile, init-firewall.sh, allowed-domains.txt y de
 echo "  Commitéalo. Para abrirlo: 'Reopen in Container' en VS Code, o"
 echo "  npx -y @devcontainers/cli@0.91.0 up --workspace-folder ."
 echo "  Fuera de VS Code, configura dentro git config --global user.name y user.email."
+if [ -n "$extra_plugins" ]; then
+  echo "  La primera vez dentro, además del plugin fabrica, instala los de extraPlugins:"
+  while IFS= read -r m; do echo "    claude plugin marketplace add $m"; done <<< "$extra_marketplaces"
+  while IFS= read -r p; do echo "    claude plugin install $p --scope project"; done <<< "$extra_plugins"
+fi

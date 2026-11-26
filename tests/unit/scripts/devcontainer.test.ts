@@ -369,6 +369,58 @@ describe("fabrica-devcontainer", () => {
     TIMEOUT,
   );
 
+  // truckconnect-mobile (2026-11-26): el MCP del plugin de Expo sale a
+  // mcp.expo.dev, y el firewall lo cortaba.
+  it(
+    "con extraPlugins, sus dominios van al firewall y dice qué instalar dentro",
+    async () => {
+      const dir = project();
+      writeFileSync(
+        path.join(dir, "factory.json"),
+        JSON.stringify({
+          extraPlugins: [
+            {
+              id: "expo@claude-plugins-official",
+              marketplace:
+                "https://github.com/anthropics/claude-plugins-official.git",
+              domains: ["mcp.expo.dev"],
+            },
+          ],
+        }),
+      );
+
+      const { code, stdout } = await run(dir, []);
+
+      expect(code).toBe(0);
+      expect(domains(dir)).toContain("mcp.expo.dev");
+      expect(stdout).toContain(
+        "claude plugin marketplace add https://github.com/anthropics/claude-plugins-official.git",
+      );
+      expect(stdout).toContain(
+        "claude plugin install expo@claude-plugins-official --scope project",
+      );
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "con extraPlugins inválido falla sin escribir nada",
+    async () => {
+      const dir = project();
+      writeFileSync(
+        path.join(dir, "factory.json"),
+        JSON.stringify({ extraPlugins: [{ id: "expo; id" }] }),
+      );
+
+      const { code, stderr } = await run(dir, []);
+
+      expect(code).not.toBe(0);
+      expect(stderr).toContain("extraPlugins");
+      expect(existsSync(path.join(dir, ".devcontainer"))).toBe(false);
+    },
+    TIMEOUT,
+  );
+
   // refastidioso-web (2026-11-24): la imagen no traía las librerías de
   // Chromium, y dentro no hay apt. Además cdn.playwright.dev redirige la
   // descarga a storage.googleapis.com, cuyas IP rotan: el firewall, que

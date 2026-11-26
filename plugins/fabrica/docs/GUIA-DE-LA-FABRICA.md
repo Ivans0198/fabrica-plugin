@@ -132,12 +132,31 @@ subsidia a nadie (Parte 8). Verifica con `gh secret list` que esté.
 
 Los workflows buscan `CLAUDE_TOKEN_<TU_USUARIO>` por nombre: no hay que
 editarlos para sumarte. Si el repo del plugin es privado, planta además
-`FABRICA_PLUGIN_TOKEN`, un token que pueda leer ese repo.
+`FABRICA_PLUGIN_TOKEN`, un token que pueda leer ese repo. Sin él, `checks` y
+`pr-conflicts` fallan con "repository not found". Se crea en GitHub, en tu
+foto → Settings → Developer settings → Personal access tokens →
+**Fine-grained tokens** → Generate new token:
+
+- **Resource owner:** el dueño del repo del plugin.
+- **Repository access:** Only select repositories, y solo el del plugin.
+- **Permissions → Contents:** Read-only. (Metadata se agrega solo.)
+
+Copia el valor (empieza con `github_pat_`; GitHub lo muestra una sola vez) y,
+en una terminal aparte, porque lo pide oculto:
+
+```
+gh secret set FABRICA_PLUGIN_TOKEN
+```
+
+El mismo token sirve para todos tus proyectos. Cuando vence, la CI vuelve a
+fallar con "repository not found": crea otro y plántalo de nuevo.
 
 Sin esto, la etiqueta `ready-for-dev` y las menciones @claude no funcionan (el
 Claude que corre en GitHub no tiene cómo autenticarse). También necesitas
 **una vez por cuenta** la GitHub App de Claude instalada:
-github.com/apps/claude → Install → All repositories.
+github.com/apps/claude → Install → All repositories. Si la instalaste con
+repos elegidos, agrega cada repo nuevo (también uno que transferiste) en
+Settings → Applications → Claude → Configure.
 
 **El tablero visual (opcional):** dile a Claude:
 
@@ -145,10 +164,19 @@ github.com/apps/claude → Install → All repositories.
 
 Solo hay 2 cosas que Claude no puede hacer por ti (limitaciones de GitHub):
 
-- Correr `gh auth refresh -s project,repo` (te pide autorizar en el navegador).
-- Activar 3 interruptores en la página del Project (⚙ → Workflows):
-  **Item added → Todo**, **Item closed → Done**, **Pull request merged → Done**.
-  Y agrupar la vista por **Parent issue**.
+- Dar a `gh` el permiso de los tableros. Es interactivo (te muestra un código
+  y abre el navegador), así que va en una terminal aparte, no con `!` dentro
+  de Claude: `gh auth refresh -h github.com -s project,repo`.
+- Activar 3 workflows en la página del Project, con el botón **Workflows**
+  (arriba a la derecha, junto a Insights). En cada uno: Edit, elige el valor
+  y "Save and turn on workflow": **Item added to project → Todo**, **Item
+  closed → Done**, **Pull request merged → Done**. Y agrupar la vista por
+  **Parent issue**.
+
+El script agrega la columna **Blocked** (la de `needs-human` y
+`blocked-by-N`), que un Project nuevo no trae. Al crearla, GitHub cambia los
+IDs de todas las columnas: si un workflow dice "A value is required", solo
+vuelve a elegir su valor.
 
 ---
 
@@ -705,6 +733,36 @@ seguir". Si no la agregas, funcionará a veces; si la agregas, siempre.
 > `.claude/skills/go-practices/SKILL.md` con las buenas prácticas de Go que
 > deba seguir la fábrica en este proyecto, y agrégala a la tabla de skills del
 > CLAUDE.md"_. Y `/fabrica:bootstrap` te la ofrece al crear proyectos nuevos.
+
+### Sumar el plugin de otro 🔌
+
+Un plugin de otro (las skills oficiales de Expo, por ejemplo) se instala en
+el proyecto igual que la fábrica:
+
+```
+claude plugin install expo@claude-plugins-official --scope project
+```
+
+Eso alcanza para tu sesión y los workers locales. La nube y el dev container
+solo instalan `fabrica`, así que el plugin va además en `factory.json` →
+`extraPlugins`, con su marketplace y los dominios que necesite (un MCP, por
+ejemplo):
+
+```json
+"extraPlugins": [
+  {
+    "id": "expo@claude-plugins-official",
+    "marketplace": "https://github.com/anthropics/claude-plugins-official.git",
+    "domains": ["mcp.expo.dev"]
+  }
+]
+```
+
+La nube lo instala desde ahí, y `fabrica-devcontainer` abre esos dominios en
+el firewall y te dice qué instalar la primera vez dentro. Si ya tienes
+`.devcontainer/`, regenéralo con `--force`. Un plugin trae sus hooks y corren
+en cada sesión, también en la nube con los secretos del repo: suma solo los
+que leíste.
 
 ---
 

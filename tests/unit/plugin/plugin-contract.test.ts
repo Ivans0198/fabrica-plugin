@@ -431,6 +431,47 @@ describe("planeación con Spec Kit", () => {
     });
   });
 
+  // Lo que faltó en la prueba con truckconnect-mobile (bitácora, 2026-11-26).
+  describe("lo que faltó en truckconnect-mobile", () => {
+    const guide = () => read("docs/GUIA-DE-LA-FABRICA.md");
+    const bootstrap = () => read("skills/bootstrap/SKILL.md");
+
+    it("la guía dice cómo crear FABRICA_PLUGIN_TOKEN", () => {
+      expect(guide()).toMatch(
+        /FABRICA_PLUGIN_TOKEN[\s\S]{0,900}Fine-grained[\s\S]{0,600}Contents[\s\S]{0,40}Read-only/,
+      );
+    });
+
+    it("gh auth refresh va en una terminal aparte, con --hostname", () => {
+      expect(guide()).toContain(
+        "gh auth refresh -h github.com -s project,repo",
+      );
+      expect(guide()).toMatch(/terminal aparte[\s\S]{0,200}gh auth refresh/);
+    });
+
+    it("los workflows del Project se abren con su botón, no con un engranaje", () => {
+      expect(guide()).not.toContain("⚙ → Workflows");
+      expect(guide()).toMatch(/botón \*\*Workflows\*\*/);
+      expect(guide()).toContain("A value is required");
+    });
+
+    it("la guía explica extraPlugins", () => {
+      expect(guide()).toMatch(/extraPlugins[\s\S]{0,600}marketplace/);
+    });
+
+    it("el bootstrap comprueba auto-merge en vez de darlo por hecho", () => {
+      expect(bootstrap()).toContain(".allow_auto_merge");
+    });
+
+    // Un emulador lanzado como hijo de la sesión dejó a claude -p sin
+    // terminar (turno 3 del bootstrap).
+    it("las reglas piden soltar o apagar los procesos que no terminan", () => {
+      expect(read("rules/fabrica.md")).toMatch(
+        /emulator[\s\S]{0,600}setsid[\s\S]{0,400}claude -p/,
+      );
+    });
+  });
+
   // Lo que la guía no explicaba en la prueba con REFASTIDIOSO (bitácora,
   // 2026-11-24 y 25): cada uno costó un paso a ciegas.
   describe("la guía cubre lo que faltó en REFASTIDIOSO", () => {
