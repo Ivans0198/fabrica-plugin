@@ -435,8 +435,10 @@ Sin VS Code, levántalo con
 `npx -y @devcontainers/cli@0.91.0 up --workspace-folder .`: la 0.80.0 se
 quedaba colgada con Docker 29 y no corría el firewall. Las sesiones de `gh` y
 de Claude quedan en volúmenes: no se repite al reconstruir. VS Code copia tu identidad de git (`user.name` y `user.email`)
-al contenedor; si lo abres de otra forma, configúrala dentro, o los commits
-de los workers no tendrán autor. Si cambias `allowed-domains.txt`, reconstruye el contenedor.
+al contenedor. Si lo abres de otra forma y git no la tiene, `fabrica-backlog`
+la toma de tu cuenta de `gh` (tu nombre y tu correo público, o el noreply de
+GitHub) antes de lanzar workers; en una sesión a mano, corre
+`fabrica-git-identity`. Si cambias `allowed-domains.txt`, reconstruye el contenedor.
 
 **Si tu proyecto tiene e2e con Playwright**, el contenedor trae Chromium dentro
 de la imagen, en la versión de `@playwright/test` del proyecto: dentro, el
@@ -606,8 +608,12 @@ PR compila el APK (`commands.androidBuild`, que lo deja en `androidApk`),
 arranca un emulador de Android, lo instala, levanta Metro
 (`commands.androidServe`) y corre los flows (`commands.androidE2e`). Ve lo
 que jest y Playwright en web no ven, como una app que se cae al arrancar en
-Hermes. Cada corrida gasta entre 15 y 25 minutos de Actions; un push nuevo
-cancela la anterior. Si falla, el artefacto `android-e2e` trae el log de
+Hermes. Corre también en `main` al mergear: las cachés que deja ahí las usan
+todos los PRs (las de un PR no las ve ningún otro). Compilar gasta entre 10 y
+20 minutos de Actions; con `commands.androidFingerprint` (la huella de la
+parte nativa, en Expo `@expo/fingerprint`) el APK queda en la caché y un PR
+que no toca la parte nativa no compila: unos 7 minutos en total. Un push
+nuevo al PR cancela la corrida anterior. Si falla, el artefacto `android-e2e` trae el log de
 Metro, el logcat y las capturas de Maestro. Sin esas claves el job no corre
 nada. No reemplaza al teléfono real.
 

@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+# Si git no tiene nombre o correo, los toma de la cuenta de gh. Uso: fabrica-git-identity
+exec bash "$(dirname "$(readlink -f "$0")")/../scripts/git-identity.sh" "$@"

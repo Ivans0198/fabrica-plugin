@@ -221,6 +221,10 @@ async function setupWorkDir(): Promise<string> {
     path.join(workDir, "scripts/worker-prompt.sh"),
   );
   await copyFile(
+    pluginFile("scripts/git-identity.sh"),
+    path.join(workDir, "scripts/git-identity.sh"),
+  );
+  await copyFile(
     WORKER_DISALLOWED_TOOLS_FILE,
     path.join(workDir, "scripts/worker-disallowed-tools.txt"),
   );
@@ -2259,6 +2263,49 @@ exit 0
       expect(code).not.toBe(0);
       expect(stderr).toMatch(/git pull/);
       expect(stderr).not.toMatch(/Haz commit/);
+    },
+    REAL_PROCESS_TEST_TIMEOUT_MS,
+  );
+});
+
+// El dev container no tenía nombre ni correo de git: el commit del worker
+// falló y lo repitió con -c a mano (truckconnect-mobile #22, 2026-11-27).
+describe("identidad de git", () => {
+  let workDir = "";
+
+  afterEach(async () => {
+    if (workDir) {
+      await rm(workDir, REMOVE_TEMP_DIR_OPTIONS);
+      workDir = "";
+    }
+  });
+
+  it(
+    "sin identidad y sin poder sacarla de gh, para antes de lanzar workers",
+    async () => {
+      workDir = await setupWorkDir();
+      await runBash(
+        "git config --unset user.name && git config --unset user.email",
+        workDir,
+        process.env,
+      );
+      const { binDir } = await installFakeGh(workDir);
+      const claude = await installFakeClaude(workDir);
+
+      const { code, stderr } = await runBash(
+        "bash scripts/process-backlog.sh",
+        workDir,
+        {
+          ...process.env,
+          PATH: `${binDir}${path.delimiter}${claude.binDir}${path.delimiter}${process.env.PATH}`,
+          GIT_CONFIG_GLOBAL: path.join(workDir, "no-gitconfig"),
+          GIT_CONFIG_NOSYSTEM: "1",
+        },
+      );
+
+      expect(code).not.toBe(0);
+      expect(stderr).toContain("git config --global user.name");
+      expect(await readLog(claude.logFile)).toBe("");
     },
     REAL_PROCESS_TEST_TIMEOUT_MS,
   );

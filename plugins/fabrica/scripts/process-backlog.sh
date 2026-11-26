@@ -23,6 +23,9 @@ REPO_ROOT=$(git rev-parse --show-toplevel 2>/dev/null || true)
 cd "$REPO_ROOT"
 command -v gh >/dev/null || { echo "❌ Falta 'gh' (GitHub CLI). Instálalo y corre 'gh auth login'" >&2; exit 1; }
 command -v jq >/dev/null || { echo "❌ Falta 'jq'. Instálalo (winget install jqlang.jq / brew install jq)" >&2; exit 1; }
+# Sin identidad de git, el commit del worker falla: en el dev container lo
+# repitió con -c a mano (truckconnect-mobile #22, 2026-11-27).
+bash "$SCRIPT_DIR/git-identity.sh" || exit 1
 
 MAX_ISSUES="${MAX_ISSUES:-10}"
 # 200, no 80: el tope es un corte seco. Un worker que se queda sin turnos no
