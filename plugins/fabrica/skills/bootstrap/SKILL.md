@@ -211,6 +211,14 @@ bloquea cada ticket.
 - **`commands.dev`**: el dev server, como lista, con el puerto fijo (ver
   abajo). Sin UI, en `null`.
 - **`appUrl`**: la URL de ese dev server. Sin UI, `null`.
+- **App móvil con flows de Maestro (`.maestro/`)**: tres claves más para el
+  job `android-e2e` del PR, que corre en un emulador. `androidBuild` compila
+  e instala la app (`["pnpm", "exec", "expo", "run:android", "--no-bundler"]`
+  en Expo), `androidServe` levanta el servidor de desarrollo en primer plano
+  (`["pnpm", "exec", "expo", "start", "--dev-client", "--port", "8081"]`) y
+  `androidE2e` corre los flows (`["pnpm", "e2e:android"]`). Sin ellas el job
+  no corre nada y lo dice. El Stop gate no las corre: el emulador no está en
+  la máquina del worker.
 - **`docLang`**: `es` o `en`, el idioma de issues, specs y PRs.
 - **`commitFormat`**: queda en `"conventional"`. Los commits siguen
   Conventional Commits, en inglés aunque `docLang` sea `es`, y el Stop gate y

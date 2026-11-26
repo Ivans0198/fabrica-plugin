@@ -1,0 +1,128 @@
+# Reusable workflow: el e2e nativo de un proyecto móvil en un emulador de
+# Android. En truckconnect-mobile #16 la app se caía al arrancar en Hermes
+# (MessageEvent, después BroadcastChannel) y ningún check lo veía: jest corre
+# en Node y `expo export` compila sin correr el bundle. El worker iteró a
+# ciegas dos veces (2026-11-26).
+#
+# Con los comandos de factory.json, por scripts/android-e2e.sh:
+#   androidBuild   compila e instala la app (expo run:android --no-bundler)
+#   androidServe   el servidor de desarrollo en primer plano (Metro)
+#   androidE2e     los flows (Maestro)
+# Sin commands.androidE2e no corre nada y lo dice.
+#
+# Lo llama .github/workflows/android-e2e.yml de cada proyecto con flows de
+# Maestro, que escribe fabrica-setup.
+name: android-e2e
+
+on:
+  workflow_call:
+    inputs:
+      fabrica_repo:
+        description: "Repo del plugin (dueño/nombre)"
+        required: true
+        type: string
+      fabrica_ref:
+        description: "Tag del plugin, el mismo del uses: que llama a este workflow"
+        required: true
+        type: string
+    secrets:
+      FABRICA_PLUGIN_TOKEN:
+        description: "Solo si el repo del plugin es privado: un token que pueda leerlo"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    # La compilación de Gradle sin caché tarda unos 10 minutos, el emulador
+    # 2 o 3 en arrancar y los flows unos minutos más.
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Trae el plugin fabrica
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ inputs.fabrica_repo }}
+          ref: ${{ inputs.fabrica_ref }}
+          path: .fabrica-plugin
+          token: ${{ secrets.FABRICA_PLUGIN_TOKEN || github.token }}
+          persist-credentials: false
+      - name: Saca el plugin del proyecto y pone sus comandos en el PATH
+        run: |
+          mv .fabrica-plugin "$RUNNER_TEMP/fabrica-plugin"
+          echo "$RUNNER_TEMP/fabrica-plugin/plugins/fabrica/bin" >> "$GITHUB_PATH"
+      - id: android
+        name: ¿El proyecto tiene e2e de Android?
+        run: |
+          if jq -e '.commands.androidE2e | type == "array"' factory.json >/dev/null 2>&1; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=Sin e2e de Android::factory.json no define commands.androidE2e (ni androidBuild y androidServe), así que no se corrió nada."
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.android.outputs.enabled == 'true'
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Activa pnpm si el proyecto lo usa
+        if: steps.android.outputs.enabled == 'true'
+        env:
+          COREPACK_ENABLE_DOWNLOAD_PROMPT: "0"
+        run: |
+          if jq -e '(.packageManager // "") | startswith("pnpm@")' package.json >/dev/null 2>&1; then
+            corepack enable
+            echo "pnpm $(pnpm --version), el de packageManager en package.json"
+          fi
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        if: steps.android.outputs.enabled == 'true'
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Caché de Gradle
+        if: steps.android.outputs.enabled == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', 'package-lock.json', 'app.json', 'app.config.*') }}
+          restore-keys: gradle-${{ runner.os }}-
+      - name: Dependencias del proyecto
+        if: steps.android.outputs.enabled == 'true'
+        run: fabrica-cmd install
+      - name: Instala Maestro
+        if: steps.android.outputs.enabled == 'true'
+        env:
+          MAESTRO_VERSION: 2.12.1
+        run: |
+          curl -fsSL "https://get.maestro.mobile.dev" | bash
+          echo "$HOME/.maestro/bin" >> "$GITHUB_PATH"
+      # Sin KVM el emulador x86_64 corre emulado y no arranca a tiempo.
+      - name: Activa KVM
+        if: steps.android.outputs.enabled == 'true'
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Emulador y flows
+        if: steps.android.outputs.enabled == 'true'
+        uses: reactivecircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d # v2.38.0
+        with:
+          api-level: 35
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: bash "${{ runner.temp }}/fabrica-plugin/plugins/fabrica/scripts/android-e2e.sh" "${{ runner.temp }}/android-logs"
+      - name: Sube los logs si falló
+        if: failure() && steps.android.outputs.enabled == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: android-e2e
+          path: |
+            ${{ runner.temp }}/android-logs
+            ~/.maestro/tests
+          if-no-files-found: ignore
