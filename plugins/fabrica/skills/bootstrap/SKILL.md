@@ -573,7 +573,8 @@ agrupar la vista por **Parent issue**.
 
 **Plugins extra.** Si la persona suma otro plugin al proyecto (el de Expo,
 por ejemplo), además de instalarlo con `--scope project` va en
-`factory.json` → `extraPlugins` con su marketplace y los dominios que
+`factory.json` → `extraPlugins` con su marketplace, su `ref` (el SHA de
+`git ls-remote <marketplace> HEAD`, nunca una rama) y los dominios que
 necesite: la nube y el dev container solo lo cargan desde ahí. Si ya hay
 `.devcontainer/`, regenéralo con `fabrica-devcontainer --force` (con sus
 opciones) para que el firewall deje salir a esos dominios.

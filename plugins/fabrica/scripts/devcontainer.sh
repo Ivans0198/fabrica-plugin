@@ -136,6 +136,11 @@ echo "  npx -y @devcontainers/cli@0.91.0 up --workspace-folder ."
 echo "  Fuera de VS Code, configura dentro git config --global user.name y user.email."
 if [ -n "$extra_plugins" ]; then
   echo "  La primera vez dentro, además del plugin fabrica, instala los de extraPlugins:"
-  while IFS= read -r m; do echo "    claude plugin marketplace add $m"; done <<< "$extra_marketplaces"
+  i=0
+  while read -r url ref; do
+    i=$((i + 1))
+    echo "    git clone $url ~/.fabrica-marketplaces/$i && git -C ~/.fabrica-marketplaces/$i checkout $ref"
+    echo "    claude plugin marketplace add ~/.fabrica-marketplaces/$i"
+  done <<< "$extra_marketplaces"
   while IFS= read -r p; do echo "    claude plugin install $p --scope project"; done <<< "$extra_plugins"
 fi

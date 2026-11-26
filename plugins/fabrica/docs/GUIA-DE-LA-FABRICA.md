@@ -758,18 +758,24 @@ claude plugin install expo@claude-plugins-official --scope project
 
 Eso alcanza para tu sesión y los workers locales. La nube y el dev container
 solo instalan `fabrica`, así que el plugin va además en `factory.json` →
-`extraPlugins`, con su marketplace y los dominios que necesite (un MCP, por
-ejemplo):
+`extraPlugins`, con su marketplace, el commit del marketplace que usas y los
+dominios que necesite (un MCP, por ejemplo):
 
 ```json
 "extraPlugins": [
   {
     "id": "expo@claude-plugins-official",
     "marketplace": "https://github.com/anthropics/claude-plugins-official.git",
+    "ref": "<SHA de 40 caracteres>",
     "domains": ["mcp.expo.dev"]
   }
 ]
 ```
+
+El `ref` es un commit, no una rama: lo sacas con
+`git ls-remote <marketplace> HEAD`. Así la nube instala siempre el mismo
+código, y un cambio en el marketplace no te mete hooks nuevos sin que lo
+decidas. Para actualizar el plugin, cambia el `ref`.
 
 La nube lo instala desde ahí, y `fabrica-devcontainer` abre esos dominios en
 el firewall y te dice qué instalar la primera vez dentro. Si ya tienes

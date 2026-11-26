@@ -103,7 +103,9 @@ jobs:
 
       # Los plugins que el proyecto suma a la fábrica (factory.json →
       # extraPlugins), leídos antes de que el agente toque nada. Sin la
-      # lista, la nube cargaba solo fabrica aunque el host tuviera más.
+      # lista, la nube cargaba solo fabrica aunque el host tuviera más. Cada
+      # marketplace se clona en el commit que fija el proyecto: sus hooks
+      # corren con los secretos de este job.
       - name: Lee los plugins extra de factory.json
         id: extra
         run: |
@@ -112,7 +114,7 @@ jobs:
             bash "$FABRICA/scripts/extra-plugins.sh" plugins
             echo "FABRICA_EOF"
             echo "marketplaces<<FABRICA_EOF"
-            bash "$FABRICA/scripts/extra-plugins.sh" marketplaces
+            bash "$FABRICA/scripts/extra-plugins.sh" clone "$RUNNER_TEMP/extra-marketplaces"
             echo "FABRICA_EOF"
           } >> "$GITHUB_OUTPUT"
 
