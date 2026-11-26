@@ -1154,6 +1154,34 @@ describe("fabrica-setup y la atribución de los commits", () => {
     TIMEOUT,
   );
 
+  // fabrica-epic llegó en la 0.5.24 (truckconnect-mobile, 2026-11-26): un
+  // proyecto de antes tiene que recibir su permiso, uno que ya lo tuvo y lo
+  // quitó no.
+  it(
+    "refresh suma los permisos que la fábrica agregó después de la versión del proyecto",
+    () => {
+      const dir = gitRepo();
+      setup(dir, ["init"]);
+      writeFileSync(path.join(dir, ".factory/version"), "0.5.23\n");
+      writeSettings(dir, {
+        attribution: SIN_ATRIBUCION,
+        permissions: { allow: ["Bash(make:*)"] },
+      });
+
+      const { code, out } = setup(dir, ["refresh"]);
+
+      expect(code, out).toBe(0);
+      expect(
+        (
+          JSON.parse(read(dir, ".claude/settings.json")) as {
+            permissions: { allow: string[] };
+          }
+        ).permissions.allow,
+      ).toEqual(["Bash(make:*)", "Bash(fabrica-epic:*)"]);
+    },
+    TIMEOUT,
+  );
+
   it(
     "refresh le quita a un proyecto el permiso viejo de --force-with-lease, sin tocar los suyos",
     () => {

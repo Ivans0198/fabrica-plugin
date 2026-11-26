@@ -203,14 +203,15 @@ seed_settings() {
   fi
 }
 
-# En refresh, de settings.json solo se toca la atribución de los commits y se
-# quitan los permisos que la fábrica ya no da.
+# En refresh, de settings.json solo se toca la atribución de los commits, se
+# suman los permisos que la fábrica agregó después de la versión del proyecto
+# y se quitan los que ya no da.
 refresh_attribution() {
   local file=.claude/settings.json result
   [ -f "$file" ] || return 0
   command -v node > /dev/null 2>&1 \
     || die "Hace falta node para revisar la atribución de los commits en $file. Instala node y vuelve a correr fabrica-setup refresh."
-  result=$(node "$SCRIPT_DIR/lib/merge-settings.mjs" "$file" "$TEMPLATES/.claude/settings.json" --attribution-only) \
+  result=$(node "$SCRIPT_DIR/lib/merge-settings.mjs" "$file" "$TEMPLATES/.claude/settings.json" --attribution-only --from "$(project_version)") \
     || die "No actualicé nada. Arregla $file y vuelve a correr fabrica-setup refresh."
   if [ "$result" = changed ]; then
     echo "  ✎ $file: al día con la fábrica (sin la atribución de Claude en los commits ni los permisos que la fábrica ya no da). Commitéalo: los workers lo leen del último commit."

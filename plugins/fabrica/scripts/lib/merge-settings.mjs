@@ -3,10 +3,11 @@
 // nada más. `fabrica-setup init` lo llama cuando el archivo ya está, por
 // ejemplo porque `claude plugin install --scope project` lo creó solo con
 // enabledPlugins. `fabrica-setup refresh` suma solo la atribución: los
-// permisos que el proyecto quitó no vuelven. Los dos quitan los permisos que
-// la fábrica ya no da (RETIRED_ALLOW).
+// permisos que el proyecto quitó no vuelven, salvo los que la fábrica agregó
+// después de la versión del proyecto (ADDED_ALLOW, con --from). Los dos quitan
+// los permisos que la fábrica ya no da (RETIRED_ALLOW).
 //
-//   node merge-settings.mjs <settings.json del proyecto> <settings.json del plugin> [--attribution-only]
+//   node merge-settings.mjs <settings.json del proyecto> <settings.json del plugin> [--attribution-only [--from <versión del proyecto>]]
 //
 // Imprime "changed" si reescribió el archivo y "same" si ya tenía todo. Si el
 // archivo no es JSON o sus permisos no son listas, no escribe nada y sale con 1.
@@ -20,6 +21,33 @@ const KINDS = ["allow", "deny"];
 // --force-with-lease permitido, se podía reescribir la rama base sin
 // preguntar (revisión del 2026-11-23).
 const RETIRED_ALLOW = ["Bash(git push --force-with-lease:*)"];
+
+// Permisos que llegaron en una versión: refresh los suma a un proyecto de una
+// versión anterior. Uno que ya estaba en esa versión y el proyecto quitó no
+// vuelve.
+const ADDED_ALLOW = [{ rule: "Bash(fabrica-epic:*)", since: "0.5.24" }];
+
+function olderThan(a, b) {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d < 0;
+  }
+  return false;
+}
+
+export function addNewAllow(settings, fromVersion) {
+  if (!/^\d+(\.\d+)*$/.test(fromVersion ?? "")) return settings;
+  const allow = rules(settings, "allow", "settings.json");
+  const missing = ADDED_ALLOW.filter(
+    ({ rule, since }) => olderThan(fromVersion, since) && !allow.includes(rule),
+  ).map(({ rule }) => rule);
+  if (!missing.length) return settings;
+  const next = structuredClone(settings);
+  (next.permissions ??= {}).allow = [...allow, ...missing];
+  return next;
+}
 
 export function dropRetired(settings) {
   const allow = settings.permissions?.allow;
@@ -83,13 +111,15 @@ function readJson(file) {
   return value;
 }
 
-function main([projectFile, templateFile, only]) {
+function main([projectFile, templateFile, only, fromFlag, fromVersion]) {
   const old = readJson(projectFile);
   const template = readJson(templateFile);
-  const next = dropRetired(
+  const merged =
     only === "--attribution-only"
       ? mergeAttribution(old, template)
-      : mergeSettings(old, template, projectFile),
+      : mergeSettings(old, template, projectFile);
+  const next = dropRetired(
+    fromFlag === "--from" ? addNewAllow(merged, fromVersion) : merged,
   );
   if (JSON.stringify(old) === JSON.stringify(next)) {
     console.log("same");

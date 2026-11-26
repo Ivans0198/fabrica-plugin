@@ -259,6 +259,8 @@ gh issue list --label needs-human
 gh issue edit N --add-label auto-merge       # se mergea sola en verde
 gh issue edit N --add-label ready-for-dev    # la trabaja la nube
 
+# Los fabrica-* fuera de Claude necesitan el PATH de la guía (Parte 3.5)
+
 # Actualizar la fábrica en un proyecto (las capturas, en su sección)
 claude plugin update fabrica@fabrica-local --scope project
 fabrica-setup refresh && fabrica-setup check  # y commitea lo que cambió

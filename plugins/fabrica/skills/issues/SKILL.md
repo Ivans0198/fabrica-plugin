@@ -73,9 +73,11 @@ Lee `spec.md`, `plan.md` y `tasks.md` de la carpeta y escribe
 
 - **Una issue por historia**, con su clave igual a la historia (`US1`). Su
   prioridad sale de P1/P2/P3 (high, medium, low).
-- **Una issue de Setup + Foundational** si `tasks.md` tiene tareas ahí. Todas
-  las historias dependen de ella. El script le da la prioridad más alta de sus
-  historias.
+- **Setup + Foundational** en una issue si `tasks.md` tiene tareas ahí, o en
+  varias (`setup`, `setup-2`, …, todas con `"phase": "setup"`) si pasan de 12
+  tareas: ninguna issue lleva más de 12 tareas. Cada una depende de la
+  anterior si hace falta, y todas las historias dependen de todas. El script
+  les da la prioridad más alta de sus historias.
 - **Una issue de Polish**, que depende de todas las historias.
 - Una historia que depende de otra lo dice en `dependsOn`. También cuando
   `tasks.md` pone a dos historias en paralelo pero sus tareas nombran el mismo
@@ -125,10 +127,15 @@ El script valida todo antes de tocar GitHub, crea las issues con sus
 final las encola. Si se corta, se vuelve a correr igual y no duplica nada. Si
 falla, muestra su mensaje: no crees issues a mano para completar.
 
-El script nunca pone `auto-merge` ni `ui-review`. Si en su OK la persona nombró
-issues para esas etiquetas ("ponle auto-merge a US1 y a Polish"), pónselas
-después de crearlas, solo a esas (`gh issue edit <n> --add-label auto-merge`).
-Si no nombró ninguna, no pongas ninguna.
+El script nunca pone `auto-merge` ni `ui-review`; las pones tú después de
+crearlas (`gh issue edit <n> --add-label ui-review`):
+
+- Si la persona aprueba la tabla, pon `ui-review` en las issues donde la tabla
+  la sugería, salvo que haya dicho otra cosa. Aprobar la tabla es aprobar lo
+  que muestra.
+- `auto-merge` solo en las issues que la persona nombró para eso ("ponle
+  auto-merge a US1"). Una sugerencia en la tabla no alcanza: es mergear sin
+  que nadie mire.
 
 ## Dónde paras
 

@@ -559,6 +559,62 @@ describe("fabrica-create-issues", () => {
     TIMEOUT,
   );
 
+  // La persona pidió partir las issues con muchas tareas: Setup salió con 17
+  // y con 19 en las dos pruebas (2026-11-26). Setup y Foundational se pueden
+  // repartir en varias issues de fase setup; una historia se parte en la spec.
+  const BIG_SETUP = Array.from(
+    { length: 13 },
+    (_, i) => `- [ ] T${String(100 + i)} Setup piece ${i}`,
+  );
+  const BIG_TASKS_MD = TASKS_MD.replace(
+    "- [ ] T004 Setup database schema",
+    `- [ ] T004 Setup database schema\n${BIG_SETUP.join("\n")}`,
+  );
+  const bigIds = BIG_SETUP.map((l) => l.split(" ")[3]!);
+
+  it(
+    "con una issue de más de 12 tareas no crea nada y pide partirla",
+    () => {
+      const p = project(BIG_TASKS_MD);
+      const plan = validPlan();
+      plan.issues[0]!.tasks = ["T001", "T004", ...bigIds];
+      const sha = writePlan(p, plan);
+
+      const { code, out } = create(p, sha);
+
+      expect(code).not.toBe(0);
+      expect(out).toMatch(/15 tareas/);
+      expect(out).toMatch(/parte/i);
+      expect(log(p).some((l) => l.startsWith("issue create"))).toBe(false);
+    },
+    TIMEOUT,
+  );
+
+  it(
+    "acepta Setup partido en dos issues, con las historias dependiendo de las dos",
+    () => {
+      const p = project(BIG_TASKS_MD);
+      const plan = validPlan();
+      plan.issues[0]!.tasks = ["T001", "T004", ...bigIds.slice(0, 6)];
+      plan.issues.splice(1, 0, {
+        ...plan.issues[0]!,
+        key: "setup-2",
+        title: "Favoritos: el resto de la base",
+        dependsOn: ["setup"],
+        tasks: bigIds.slice(6),
+      });
+      for (const issue of plan.issues.filter((e) => e.phase === "story"))
+        issue.dependsOn = ["setup", "setup-2"];
+      const sha = writePlan(p, plan);
+
+      const { code, out } = create(p, sha);
+
+      expect(code, out).toBe(0);
+      expect(created(p)).toHaveLength(5);
+    },
+    TIMEOUT,
+  );
+
   // Las dos historias conectan su cambio en src/cli.ts y suman tests a
   // tests/cli.test.ts. Setup y Polish también tocan src/cli.ts, y las dos
   // historias leen la misma spec: nada de eso cuenta, porque Setup va antes y
