@@ -17,6 +17,7 @@ playwright-report/
 # regenera en la máquina de cada quien y es informativo; versionarlo
 # reintroduce el conflicto binario entre PRs paralelos. Lista blanca en vez de
 # enumerar plataformas: nadie tiene que acordarse de añadir -darwin el día que
-# alguien trabaje en un Mac.
-tests/ui.spec.ts-snapshots/*
-!tests/ui.spec.ts-snapshots/*-linux.png
+# alguien trabaje en un Mac. Vale para la carpeta de cada spec
+# (tests/<spec>-snapshots/), no solo la de ui.spec.ts.
+tests/**/*-snapshots/*
+!tests/**/*-snapshots/*-linux.png

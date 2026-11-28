@@ -64,6 +64,14 @@ describe("líneas base", () => {
     expect(isIgnored(aLinuxCapture)).toBe(false);
   });
 
+  it("ignora las capturas de Windows y macOS también en la carpeta de otro spec", () => {
+    const otherSpec = "tests/compliance.spec.ts-snapshots";
+
+    expect(isIgnored(`${otherSpec}/docs-chromium-win32.png`)).toBe(true);
+    expect(isIgnored(`${otherSpec}/docs-chromium-darwin.png`)).toBe(true);
+    expect(isIgnored(`${otherSpec}/docs-chromium-linux.png`)).toBe(false);
+  });
+
   it("el header de ui.spec.ts ya no describe el mecanismo manual que este ticket reemplaza", () => {
     const header = readFileSync(UI_SPEC_PATH, "utf8");
 

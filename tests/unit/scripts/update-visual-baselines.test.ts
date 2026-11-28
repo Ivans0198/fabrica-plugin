@@ -65,6 +65,7 @@ async function installFakeNpx(
   options: {
     firstCompareExit: 0 | 1;
     regenerateChangesFile: boolean;
+    newSpecSnapshot?: boolean;
   },
 ): Promise<{ binDir: string; logFile: string }> {
   const binDir = path.join(workDir, "fake-bin");
@@ -77,10 +78,19 @@ async function installFakeNpx(
     "tests/ui.spec.ts-snapshots/home-desktop-light-chromium-linux.png",
   );
 
+  // Un spec nuevo guarda sus capturas en su propia carpeta, que todavía no
+  // existe en git: tests/<spec>-snapshots/.
+  const newSpecDir = path.join(workDir, "tests/compliance.spec.ts-snapshots");
+  const newSpecFile = path.join(
+    newSpecDir,
+    "docs-empty-phone-chromium-linux.png",
+  );
+
   const script = `#!/usr/bin/env bash
 echo "$@" >> "${toBashPath(logFile)}"
 if [ "$3" = "--update-snapshots" ]; then
   ${options.regenerateChangesFile ? `echo "regenerated-$RANDOM" > "${toBashPath(snapshotFile)}"` : "true"}
+  ${options.newSpecSnapshot ? `mkdir -p "${toBashPath(newSpecDir)}" && echo "new-$RANDOM" > "${toBashPath(newSpecFile)}"` : "true"}
   exit 0
 fi
 exit ${options.firstCompareExit}
@@ -204,5 +214,54 @@ describe("scripts/update-visual-baselines.sh", () => {
 
     expect(code).toBe(1);
     expect(await stagedFiles(workDir)).toBe("");
+  });
+
+  it("agrega las capturas de un spec nuevo, en su propia carpeta de snapshots", async () => {
+    workDir = await mkdtemp(path.join(tmpdir(), "update-baselines-"));
+    await initGitRepoWithCommittedSnapshot(workDir);
+    const { binDir } = await installFakeNpx(workDir, {
+      firstCompareExit: 1,
+      regenerateChangesFile: false,
+      newSpecSnapshot: true,
+    });
+    const env = {
+      ...process.env,
+      PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+    };
+
+    const { code } = await runScript(workDir, env);
+
+    expect(code).toBe(1);
+    expect(await stagedFiles(workDir)).toBe(
+      "tests/compliance.spec.ts-snapshots/docs-empty-phone-chromium-linux.png",
+    );
+  });
+
+  it("no agrega capturas que el .gitignore del proyecto excluye", async () => {
+    workDir = await mkdtemp(path.join(tmpdir(), "update-baselines-"));
+    await initGitRepoWithCommittedSnapshot(workDir);
+    await writeFile(
+      path.join(workDir, ".gitignore"),
+      "tests/**/*-snapshots/*\n!tests/**/*-snapshots/*-linux.png\n",
+    );
+    const darwinFile = path.join(
+      workDir,
+      "tests/ui.spec.ts-snapshots/home-desktop-light-chromium-darwin.png",
+    );
+    await writeFile(darwinFile, "local-mac-capture");
+    const { binDir } = await installFakeNpx(workDir, {
+      firstCompareExit: 1,
+      regenerateChangesFile: true,
+    });
+    const env = {
+      ...process.env,
+      PATH: `${binDir}${path.delimiter}${process.env.PATH}`,
+    };
+
+    await runScript(workDir, env);
+
+    expect(await stagedFiles(workDir)).toBe(
+      "tests/ui.spec.ts-snapshots/home-desktop-light-chromium-linux.png",
+    );
   });
 });

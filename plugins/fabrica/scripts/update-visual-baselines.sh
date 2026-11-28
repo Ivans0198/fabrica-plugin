@@ -21,7 +21,11 @@
 #
 # Usage: scripts/update-visual-baselines.sh
 
-SNAPSHOTS_DIR="tests/ui.spec.ts-snapshots"
+# Cada spec de Playwright guarda sus capturas en su propia carpeta,
+# `<spec>-snapshots/` (tests/ui.spec.ts-snapshots, tests/compliance.spec.ts-
+# snapshots...). Se agregan todas las que cambiaron o son nuevas, y el
+# .gitignore del proyecto decide qué plataformas quedan fuera.
+SNAPSHOTS_PATHSPEC='*-snapshots/*'
 
 set -uo pipefail
 
@@ -32,7 +36,8 @@ fi
 
 echo "update-visual-baselines: la comparación falló, regenerando desde esta rama." >&2
 npx playwright test --update-snapshots
-git add "$SNAPSHOTS_DIR"
+git ls-files -z --modified --others --exclude-standard -- "$SNAPSHOTS_PATHSPEC" |
+  xargs -0 -r git add --
 
 if git diff --cached --quiet; then
   echo "update-visual-baselines: la regeneración no cambió ninguna captura; el fallo no era de píxeles." >&2
